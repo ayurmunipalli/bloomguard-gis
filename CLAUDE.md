@@ -7,8 +7,10 @@ conflict on a project decision, PLAN.md wins. This file = how we operate in this
 - R-first. Data/spatial/modeling pipeline is R (sf, sftime, stars, tmap, data.table,
   ranger/caret). Use renv; commit renv.lock. Python only for the Stage-2 transformer.
 - Commit the pipeline as sourced .R scripts that run end-to-end, not notebooks.
-- The sandbox CANNOT reach NASA/NOAA/Copernicus. Heavy data pulls run OUTSIDE the sandbox
-  (user or lead runs them); sandboxed agents read the resulting local files.
+- Network egress IS available: NASA/NOAA/Copernicus/CRAN + package repos are allowlisted in
+  ~/.claude/settings.json — pull data directly in-pipeline. If a host is still blocked
+  (prompt or 403), note it and fall back to data/raw/<source>/manual_downloads.md.
+- wget is NOT installed on this machine. Use R's download.file()/httr2, or curl. Never wget.
 
 ## Credentials (never commit)
 - NASA Earthdata -> ~/.netrc. Copernicus CDS -> ~/.cdsapirc.

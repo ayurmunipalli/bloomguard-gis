@@ -20,10 +20,11 @@
 1. **Follow the milestone gates in §3.** Do not start a milestone until its entry criteria are met. Do not skip ahead because a later task looks interesting.
 2. **Write every output to the exact path given in §6.** Paths are contracts between agents. If you change a path, update this file and tell the lead.
 3. **Leave a methods trail in every file (mandatory — see §0.1).** The author is writing the paper from your notes. Undocumented work is incomplete work.
+4. **Produce a per-agent decision log as a first-class deliverable (mandatory — see §0.2).** Beyond inline notes, every agent writes `reports/agent_logs/<agent>.md` recording every decision it made, every data source it used (with access details), and every method/technique it applied. This is part of your definition-of-done, not an afterthought. A-DOC consumes these logs to build the publication source set (§6, A-DOC).
 4. **Teammates return short summaries to the lead**, not full transcripts: what you did, what file you produced, whether your definition-of-done is met, any blocker.
 5. **Never fabricate data or results.** See §1. This is the one rule that ends the project if broken.
 6. **When blocked on data access, do not stall silently.** Write exact manual steps to the relevant `manual_downloads.md` and continue with a **clearly-labeled** synthetic placeholder (an `IS_PLACEHOLDER = TRUE` column and a loud README note) so downstream agents can build against the schema.
-7. **Definition of "done" is written per agent in §6.** "I wrote some code" is not done. "The output file exists at the specified path, passes its quality checks, notes are written, and the summary reports pass/fail on each check" is done.
+7. **Definition of "done" is written per agent in §6.** "I wrote some code" is not done. Done = the output file exists at the specified path, passes its quality checks, the inline notes **and** the `reports/agent_logs/<agent>.md` decision log are written, **the paired reviewer (§6.0) has signed off — for data agents A1–A6**, and the summary reports pass/fail on each check.
 8. **Commit at each milestone** via `/commit-push-pr`. Keep secrets, API keys, raw satellite dumps, and model binaries out of git (see `.gitignore` task).
 
 ### 0.1 The notes convention (this is how the author writes the paper)
@@ -51,6 +52,24 @@ Inline, tag anything the author will need to explain or cite:
 ```
 
 Use the same convention in Python/notebooks with `#` comments. A-DOC greps for `NOTE(paper)`, `NOTE(cite)`, and `NOTE(limitation)` — if it isn't tagged, it won't reach the paper.
+
+### 0.2 The per-agent decision log (a required deliverable for every agent)
+
+Inline `NOTE()` tags capture *why a line of code exists*; the decision log captures *the reasoning at the level the paper needs*. Every agent maintains `reports/agent_logs/<agent>.md` and updates it as it works. Minimum structure:
+
+```markdown
+# <agent> — decision & methods log
+## Decisions
+- <decision made> — <why> — <alternatives considered / rejected> — <date>
+## Data sources used
+- <dataset> — <access method / URL> — <version / date accessed> — <license> — <what it fed>
+## Methods & techniques
+- <technique> — <where applied (file/function)> — <parameters chosen> — <citation or "novel/mentor's method">
+## Open questions / caveats / limitations
+- <anything the author must flag in the paper>
+```
+
+Rules: no decision is "obvious" enough to skip; if you chose a parameter (cell size, threshold, window length, hyperparameter), log it and why. This log is checked by your reviewer (§6.0) and harvested by A-DOC — an agent whose log is missing or thin is **not done**.
 
 ---
 
@@ -174,6 +193,11 @@ bloomguard-gis/
   reports/
     decisions.md       # log any change to §2
     methods_log.md     # A-DOC: harvested techniques + citations (feeds the paper)
+    technique_index.md # A-DOC: technique -> where used -> source
+    agent_logs/        # one <agent>.md decision log per agent (§0.2)
+  paper/
+    source_set.md      # A-DOC: FINAL deliverable — publication-ready cited source set
+    references.bib     # A-DOC: all citations, resolvable
   data/
     raw/
       habsos/          (+ manual_downloads.md)
@@ -245,17 +269,38 @@ bloomguard-gis/
 
 Ordered by dependency. Each agent's model is noted. A-DOC runs continuously alongside the others.
 
-### A-DOC · documentation & citations *(model: sonnet-5)* — **runs the whole project**
-The single agent responsible for citing all data and documenting all techniques used across the project. **This is the only "writing" agent, and it does not write the paper** — it produces the sourced raw material the author writes from.
-- **In:** every file the other agents produce; the attached PDFs (planning doc, Green 2022 RTM paper, the author's literature-review notes); the `NOTE(...)` tags in code.
-- **Out:**
-  - `data/metadata/data_sources.md` — complete, verified source table (see §5 required fields).
-  - `reports/methods_log.md` — running log of every technique used, in plain language, each tied to (a) the file that uses it and (b) a citation (a real paper from the PDFs, or "novel to this project / mentor's method").
+### 6.0 Paired reviewers (data-pipeline agents only)
+
+**Reviewers are attached only to the agents that pull and shape the data — A1–A6.** Those are the stages where a silent inaccuracy (a bad pull, a broken join, a mislabeled cell) would propagate undetected through everything downstream, so each gets a dedicated checker. The modeling/output agents (A7 RF, A8 explain, A9 gis, A10 validation, A11 transformer) and A-DOC do **not** get general paired reviewers — their work is inspectable from their own outputs and their built-in **Checks** and the milestone gates still apply. **The one exception is R-SPLIT** (below), a single narrow leakage check on the A7/A11 train/test split.
+
+Each data agent A*n* (n = 1–6) is paired with a **reviewer R*n*** whose only job is to verify A*n*'s output against its definition-of-done and **Checks**, and — if it finds a problem — **hand the specific defect back to A*n* to fix** (the reviewer does *not* fix it itself). Loop: agent produces → reviewer verifies → if fail, reviewer returns a numbered defect list (file, location, what's wrong, why it matters) → agent fixes → reviewer re-checks → **pass**. A data agent's output is not done, and downstream agents depending on it don't start, until its reviewer signs off. Reviewers report only pass/fail + defects to the lead.
+
+**Reviewer model = the cheapest that will still catch that agent's class of mistake.** Straightforward checks (schema/columns, CRS consistency, paths, obvious gaps) → **Haiku 4.5**. Checks where a subtle miss is expensive and data-corrupting — label correctness and look-ahead leakage baked into the datacube — → **Sonnet 5**.
+
+| Reviewer | Model | Watches for (its agent's high-risk data mistakes) |
+|---|---|---|
+| R1 (sourcing) | haiku-4-5 | wrong dataset/version, committed secrets, unlabeled placeholders |
+| R2 (grid-clean) | haiku-4-5 | CRS mismatch, wrong box/cell size, grid gaps |
+| R3 (habsos-label) | **sonnet-5** | wrong threshold, negatives dropped, non-detection treated as absence |
+| R4 (sat-features) | haiku-4-5 | silent zero-fill, cloud pixels leaking, wrong time windows |
+| R5 (env-features) | haiku-4-5 | join duplication, coarse features implying fine precision |
+| R6 (datacube) | **sonnet-5** | **look-ahead leakage**, join blow-up, mislabeled T+H, row miscount |
+
+Burning extra credits on these six reviewers is expected and wanted — a bad-data bug caught at A1–A6 is far cheaper than discovering it after the model trained on it.
+
+**One narrow exception on the modeling side — R-SPLIT (`sonnet-5`).** The split-leakage risk is a *data-handling* error wearing a modeling costume, so it gets the single targeted checker the rest of A7–A11 do not. R-SPLIT reviews **only the train/test split construction** in A7 (RF) and A11 (transformer) — nothing else about those agents. It verifies: (1) **no spatially adjacent cells straddle train and test** (grouped/blocked split respects the spatial-autocorrelation clusters flagged by A6); (2) **temporal split is clean** — no future rows in training for a given horizon; (3) **the T+H label window doesn't bleed across the split boundary**. Same loop as R1–R6: if it finds leakage, it hands the specific defect back to A7/A11 to fix; A7's best model and A11's results are not "done" until R-SPLIT signs off. It does **not** review model code, hyperparameters, or metrics — those stay on the agents' own Checks.
+
+### A-DOC · publication source set *(model: sonnet-5)* — **runs continuously; produces the FINAL deliverable**
+The dedicated agent that reads **every agent's `reports/agent_logs/<agent>.md`** (their decisions, sources, and methods — §0.2) plus the inline `NOTE()` tags, and synthesizes them into a single **publication-ready source set** for the author's paper. **This is the project's final deliverable.** It is the only "writing" agent, and it does **not** write the paper — it produces the cited, organized raw material the author writes from.
+- **In:** all `reports/agent_logs/*.md`; every file the other agents produce; the `NOTE(...)` tags; the attached PDFs (planning doc, Green 2022 RTM paper, the author's literature-review notes).
+- **Out (the final deliverable):**
+  - `paper/source_set.md` — the master document: for every decision, method, and dataset used anywhere in the project, a publication-ready entry (plain-language description + the citation to use + which agent/file it came from), organized by paper section (Data / Methods / Modeling / Results / Limitations) so the author can lift it straight in.
   - `paper/references.bib` — every cited source as a resolvable DOI/URL. **No invented citations.**
-  - `reports/technique_index.md` — table mapping technique → where used → source paper → `NOTE(paper)` excerpts.
-- **Done:** every dataset in `data_sources.md`; every `NOTE(paper)`/`NOTE(cite)` harvested; every technique traceable to a file and a citation; every `.bib` entry resolves.
-- **Checks:** no invented citations; no technique in the code missing from `methods_log.md`; flags any claim in code comments that overstates what the data supports.
-- **Explicitly not doing:** abstract, introduction, related-work prose, discussion. The author writes those.
+  - `data/metadata/data_sources.md` — complete, verified source table (see §5 required fields).
+  - `reports/methods_log.md` + `reports/technique_index.md` — technique → where used → source, harvested across all agent logs.
+- **Done:** every per-agent log consumed; every decision/method/dataset in the project has a traceable, publication-ready entry in `source_set.md`; every `.bib` entry resolves; nothing in the code or logs is missing from the source set.
+- **Checks (self-enforced; no paired reviewer):** no invented or unresolvable citations; every technique traces to a real source or is honestly marked "novel / mentor's method"; flags any agent-log claim that overstates what the data supports.
+- **Explicitly not doing:** abstract, introduction, related-work prose, discussion. The author writes those from the source set.
 
 ### A1 · sourcing — Data Sourcing *(model: sonnet-5)* ← **M1 critical path, do first**
 - **In:** §5 dataset table; access links from notes.
@@ -289,17 +334,17 @@ The single agent responsible for citing all data and documenting all techniques 
 - **Done:** wind (speed/dir + along/cross-shore), precip history, salinity, distance-to-shore, bathymetry, seasonality (month + day-of-year sin/cos) per cell × date.
 - **Checks:** one row per cell-day; missing-data report; coarse features (salinity) flagged as broad-context.
 
-### A6 · datacube — Build the Datacube *(model: opus-4-8)*
+### A6 · datacube — Build the Datacube *(model: fable-5)*
 - **In:** labels + satellite + environmental features.
 - **Out:** `data/processed/datacube.rds` (`sftime` vector cube) **and** the flattened `model_dataset.parquet` / `.gpkg`.
 - **Done:** all layers joined **on date via inner/left joins** (not one giant outer join — per Sept 25 mentor guidance), then combined across grids (`rbindlist`-style) into the cube; **trend features (D11/§8-B) computed here** from the per-cell time series; **T+H labels attached** with a leakage assertion (§2.2); flatten produces one clean row per cell × date for Stage 1 **and** exposes **per-cell ordered sequences** for the Stage-2 transformer.
 - **Checks:** no join blow-up from many-to-many; row counts reconcile; **no look-ahead** — assert every feature timestamp ≤ _T_ and every label timestamp = _T+H_; **spatial-autocorrelation flag** — mark clusters of adjacent cells so A7/A11 prevent leakage; cube slices back to the grid for mapping.
 
-### A7 · modeling — Stage-1 Random Forest *(model: opus-4-8)* ← **M1 exit owner**
+### A7 · modeling — Stage-1 Random Forest *(model: fable-5)* ← **M1 exit owner**
 - **In:** `model_dataset.parquet` (levels + trend features + T+H labels).
 - **Out:** `outputs/models/best_model.rds`, `outputs/tables/model_results.csv`, confusion/ROC/PR figures, **skill-vs-horizon curve**.
 - **Done:** **Random Forest** (`ranger`/`caret`) trained and reported **per forecast horizon** H ∈ {1,3,5,7,14}, against the persistence + chlorophyll-only reference baselines (§9); evaluated under §9's three splits.
-- **Checks:** **no look-ahead leakage** (§2.2) *and* no target-defining features; adjacent cells don't straddle train/test (grouped/spatial splits); **prioritize recall + PR-AUC** (a missed bloom > a false alarm); report the performance *drop* under temporal/spatial splits **and** the decay across horizons honestly.
+- **Checks:** **no look-ahead leakage** (§2.2) *and* no target-defining features; adjacent cells don't straddle train/test (grouped/spatial splits); **prioritize recall + PR-AUC** (a missed bloom > a false alarm); report the performance *drop* under temporal/spatial splits **and** the decay across horizons honestly. **The train/test split must be signed off by R-SPLIT (§6.0) before the best model counts as done.**
 
 ### A8 · explain — Stage-1 Explainability *(model: opus-4-8)*
 - **In:** best Stage-1 model + datacube.
@@ -307,7 +352,7 @@ The single agent responsible for citing all data and documenting all techniques 
 - **Done:** SHAP + variable-importance (à la Green 2022); top predictors described in environmental terms; **explicitly report whether *levels* or *trends* carry more signal** (this is a headline question for the author's forecasting claim). (Transformer attribution lives in A11.)
 - **Checks:** "associated with," never "causes"; note if top features are just proxies for chlorophyll.
 
-### A9 · gis — GIS Risk Mapping *(model: sonnet-5)* ← **M2**
+### A9 · gis — GIS Risk Mapping *(model: fable-5)* ← **M2**
 - **In:** current best model (Stage-1 first; swap to transformer only if it wins the hard splits) + feature pipeline + **native-resolution feature rasters for the mapped date(s)** (from A4; see note) + static sub-km layers (bathymetry, distance-to-coast).
 - **Out:** `hab_risk_grid.gpkg`, `hab_risk_raster.tif`, `priority_monitoring_zones.gpkg`, `outputs/gis/intracell_attention.gpkg`, `outputs/maps/hab_risk_map.html`, QGIS project or `tmap`/`leaflet` script.
 - **Done:** model applied per cell for chosen date(s); identical feature pipeline reused; interactive map has the full layer stack. **Intra-cell attention drill-down (D12/§2.3):** for flagged cells, re-derive the native ~4 km feature pixels within the cell for the mapped date, render a sub-cell feature-intensity overlay, and highlight *convergence* (elevated pixel ∩ shallow/nearshore static context). Prefer level fields; show pixel-level trend fields cautiously or omit.
@@ -323,7 +368,7 @@ The single agent responsible for citing all data and documenting all techniques 
 - **In:** the datacube as **per-cell temporal sequences** (levels + trend features through _T_) + the T+H labels; the Stage-1 results table to beat.
 - **Out:** `outputs/models/transformer.*`, transformer rows appended to `outputs/tables/model_results.csv`, attention/attribution figures, a head-to-head comparison table.
 - **Done:** temporal (or spatiotemporal) transformer trained → forecast `HAB` at T+H; evaluated on the **same horizons and same three splits** as Stage 1; compared directly to baseline + RF.
-- **Checks:** **no look-ahead leakage** in sequence construction (§2.2); same grouped/spatial splits as A7 so the comparison is fair; **honest verdict** — if it doesn't beat RF under the hard splits, report that plainly; guard against overfitting (dropout, early stopping, class weighting rather than naive oversampling — cf. the author's ADASYN notes).
+- **Checks:** **no look-ahead leakage** in sequence construction (§2.2); same grouped/spatial splits as A7 so the comparison is fair — **the split must be signed off by R-SPLIT (§6.0)**; **honest verdict** — if it doesn't beat RF under the hard splits, report that plainly; guard against overfitting (dropout, early stopping, class weighting rather than naive oversampling — cf. the author's ADASYN notes).
 - **Spawns after M1 is committed** (needs the Stage-1 benchmark); may run in parallel with A9 GIS.
 
 ---
@@ -342,9 +387,10 @@ scaffold repo ──> A1 sourcing ──> A2 grid+clean ──> A3 habsos-labels
                                                                    ├──> A9  gis (M2, off best model)
                                                                    └──> A11 transformer (Stage 2 / M3, committed) ──> refresh A9 if it wins
 
-A-DOC ── runs continuously, consuming every file above and the PDFs ──> methods_log.md + references.bib + data_sources.md
+A-DOC ── consumes every reports/agent_logs/*.md + files + PDFs ──> paper/source_set.md (FINAL) + references.bib
+Data agents A1–A6 are shadowed by reviewers R1–R6 (§6.0): agent → review → fix → pass, before output counts as done. A7–A11 and A-DOC have no general paired reviewer — except **R-SPLIT** (sonnet-5), which checks only the A7/A11 train/test split for spatial/temporal leakage. Their built-in Checks + the milestone gates apply otherwise.
 ```
-**Rule:** A7 cannot begin until `model_dataset.parquet` passes A6's checks. A9 cannot begin until A7 produces a validated best model. A-DOC never blocks anyone but must be current before each milestone commit.
+**Rule:** A7 cannot begin until `model_dataset.parquet` passes A6's checks **and R6 signs off** (this is the last data-integrity gate — leakage/label errors must be caught here, before modeling). A9 cannot begin until A7 produces a validated best model. A-DOC never blocks anyone but must be current before each milestone commit; its `source_set.md` is the final deliverable. **Run all independent branches in parallel (§11).**
 
 ---
 
@@ -404,20 +450,26 @@ For each continuous level feature _x_ (especially chl-a, FAI, nFLH, SST, Kd490):
 
 **Not on this list, by design:** abstract, introduction, related-work, methodology prose, discussion, conclusion. **The author writes the paper.**
 
+**The final deliverable:** `paper/source_set.md` (+ `references.bib`) — the publication-ready, fully-cited source set A-DOC assembles from every agent's decision log. This is what the whole team exists to produce for the author.
+
+**Also required from every agent:** its `reports/agent_logs/<agent>.md` decision log (§0.2). Data agents A1–A6 additionally require their paired reviewer's sign-off (§6.0).
+
 ---
 
-## 11. Six-week timeline, risks & backups
+## 11. Execution mode: ASAP & maximally parallel (no calendar)
 
-| Week | Focus | Owner(s) |
-|---|---|---|
-| 1 | Scaffold; study-area polygon; source data; HABSOS labels; start `data_sources.md` | A1, A2, A3, A-DOC |
-| 2 | Grid + satellite feature extraction (MODIS first) | A2, A4 |
-| 3 | Environmental + **trend features** + datacube (levels, trends, T+H labels, per-cell sequences) | A5, A6 |
-| 4 | **Stage 1:** Random Forest, per-horizon, all-split eval + SHAP → **M1 done** | A7, A8 |
-| 5 | GIS forecast layers + interactive map + error analysis → **M2 done** | A9, A10 |
-| 6 | **Stage 2:** transformer + head-to-head comparison → **M3 done**; A-DOC final methods pass | A11, A-DOC |
+**There is no multi-week schedule. Run this as fast as the dependency graph allows, spending credits freely to do so.** The only thing that constrains ordering is real data dependencies (§7), not time. Rules for the lead:
 
-**Risks & backups:** GEE/Copernicus/Earthdata access blocked → downloadable MODIS L3 rasters or shrink study area/time span. **Disk fills during satellite pull** → this is expected if bulk-downloading; A4's stream-and-discard loop is mandatory (process one day, aggregate, delete raw), so peak disk stays tiny; if still tight, point the download dir at external/synced storage. Too few positives → widen the box or lengthen the year range. Feature extraction too slow → MODIS-only, parallelize the per-day pulls (Nov 15 note). Datacube join blows up → revert to inner/left joins on date only, sample points as in the `gulf` script. **Transformer underperforms or stalls** → ship Stage 1 + GIS as the complete result; the transformer comparison stands as a finding either way (Stage 1 is the paper's core, so the project is never blocked on Stage 2). **Too few positives at long horizons** → shorten H; a solid 3-day forecast beats a broken 14-day one.
+- **Parallelize everything that has no unmet dependency.** Once A1 (sourcing) lands raw HABSOS + the grid exists, fan out A3/A4/A5 concurrently. Do not run agents serially "to be safe" — run every independent branch at once.
+- **Reviewers run concurrently with the next agent's work**, not as a blocking serial step: R*n* checks A*n*'s output while downstream agents that don't depend on it proceed. A failed review only blocks the branch that depends on the defective output.
+- **A-DOC and every agent's decision log update continuously**, not in a final pass — the source set is assembled as work lands, so the final deliverable is ready the moment M-work finishes.
+- **Spend credits for speed.** Prefer more parallel agents, larger models where they cut iterations, and immediate re-runs over waiting. Cost is not a constraint here; wall-clock time is.
+- **Gate discipline still holds.** "Fast" does not mean skipping the milestone gates or reviewer sign-off (§3, §6.0) — those prevent the leakage/fabrication errors that would cost far more time in rework than they save. Parallelize *within* the gates; don't remove them.
+
+Rough critical path (the longest unavoidable chain, run everything else alongside it): **sourcing → grid → datacube → RF (M1) → validation, with GIS and the transformer branching off as soon as M1's model exists.** Everything not on that chain (labels, features, A-DOC, explainability) runs in parallel with it.
+
+## 11.1 Risks & backups
+GEE/Copernicus/Earthdata access blocked → downloadable MODIS L3 rasters or shrink study area/time span. **Disk fills during satellite pull** → expected if bulk-downloading; A4's stream-and-discard loop is mandatory (process one day, aggregate, delete raw), so peak disk stays tiny; if still tight, point the download dir at external/synced storage. Too few positives → widen the box or lengthen the year range. Feature extraction too slow → MODIS-only, parallelize the per-day pulls (Nov 15 note). Datacube join blows up → revert to inner/left joins on date only, sample points as in the `gulf` script. **Transformer underperforms or stalls** → ship Stage 1 + GIS as the complete result; the transformer comparison stands as a finding either way (Stage 1 is the paper's core, so the project is never blocked on Stage 2). **Too few positives at long horizons** → shorten H; a solid 3-day forecast beats a broken 14-day one.
 
 ---
 

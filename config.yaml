@@ -1,0 +1,81 @@
+# ==================================================================
+# BloomGuard GIS — central configuration
+# Single source of truth for pinned decisions (PLAN.md §2). Changing a
+# value here that touches a D-decision requires a note in reports/decisions.md.
+# ==================================================================
+
+project:
+  name: BloomGuard GIS
+  description: >
+    Forecasting Karenia brevis HAB risk H days ahead from levels and
+    short-term trends of satellite/environmental conditions, on a coastal grid.
+
+# --- Study area & grid (D1, D4) ---
+study_area:
+  # West Florida Shelf bounding box, Hu et al. (2022) Harmful Algae 117:102289
+  bbox_wgs84:            # lon/lat degrees (EPSG:4326)
+    xmin: -87.0
+    ymin: 24.0
+    xmax: -81.0
+    ymax: 31.0
+  crs_geographic: "EPSG:4326"
+  crs_projected: "EPSG:5070"   # Albers Equal Area (metric distances)
+
+grid:
+  cellsize_m: 10000            # 10 km cells (Green method; > ~4 km MODIS L3 pixel)
+  id_col: "cell_id"
+
+# --- Labeling (D2, D3) ---
+label:
+  species: "Karenia brevis"
+  threshold_cells_per_L: 100000   # positive HAB label above this
+  target: "binary"                # HAB = 1 if cell-day exceeds threshold
+
+# --- Forecast horizons (D5) ---
+forecast:
+  primary_horizon_days: 7
+  horizons_days: [1, 3, 5, 7, 14]
+
+# --- Trend/rate-of-change windows (D11, §8-B) ---
+trends:
+  delta_lags_days: [1, 3, 5, 7]
+  slope_windows_days: [3, 5, 7]
+  rolling_windows_days: [3, 7]
+  pct_change_epsilon: 1.0e-6      # divide-by-zero guard for % change
+  dod_pct_threshold: 10           # "chl-a up >10% day-over-day" flag
+  dod_consecutive_days: 2         # for N-consecutive-day crossing flag
+
+# --- Evaluation (§9) ---
+evaluation:
+  splits: ["random", "temporal", "spatial"]
+  primary_metrics: ["recall", "pr_auc", "false_negative_rate"]
+  all_metrics: ["accuracy", "precision", "recall", "f1", "roc_auc", "pr_auc"]
+  baselines: ["persistence", "chlorophyll_only"]
+
+# --- Paths (contracts between agents; PLAN.md §4/§6) ---
+paths:
+  raw_habsos: "data/raw/habsos"
+  raw_satellite: "data/raw/satellite"
+  raw_weather: "data/raw/weather"
+  raw_gis: "data/raw/gis"
+  processed: "data/processed"
+  grid: "data/processed/study_area_grid.gpkg"
+  habsos_labels: "data/processed/habsos_labels.parquet"
+  satellite_features: "data/processed/satellite_features.parquet"
+  environmental_features: "data/processed/environmental_features.parquet"
+  datacube: "data/processed/datacube.rds"
+  model_dataset: "data/processed/model_dataset.parquet"
+  model_dataset_gpkg: "data/processed/model_dataset.gpkg"
+  outputs_models: "outputs/models"
+  outputs_figures: "outputs/figures"
+  outputs_tables: "outputs/tables"
+  outputs_maps: "outputs/maps"
+  outputs_gis: "outputs/gis"
+
+# --- Credentials (paths only; never commit the files) ---
+credentials:
+  earthdata_netrc: "~/.netrc"       # NASA Earthdata (MODIS, SMAP)
+  copernicus_cdsapirc: "~/.cdsapirc" # ERA5 via Copernicus CDS
+
+# --- Reproducibility ---
+random_seed: 42

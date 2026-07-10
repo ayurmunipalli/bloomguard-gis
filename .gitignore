@@ -1,0 +1,56 @@
+# ------------------------------------------------------------------
+# BloomGuard GIS .gitignore
+# Keep secrets, raw satellite dumps, and model binaries out of git.
+# ------------------------------------------------------------------
+
+# Raw data (pulled/streamed in-pipeline; never committed) — but keep folder
+# structure + docs. Note: must ignore files (not the dirs) so negations apply.
+data/raw/**
+!data/raw/**/
+!data/raw/**/manual_downloads.md
+!data/raw/**/.gitkeep
+
+# Large binary / geospatial artifacts
+*.tif
+*.tiff
+*.nc
+*.rds
+*.pkl
+*.h5
+*.hdf
+*.nc4
+test_modis.nc
+
+# Credentials / secrets
+.env
+.netrc
+.cdsapirc
+*.key
+*.token
+*_secret*
+credentials*.json
+
+# R / renv
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+renv/library/
+renv/local/
+renv/cellar/
+renv/lock/
+renv/python/
+renv/staging/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# OS / editor cruft
+.DS_Store
+*.swp
+.idea/
+.vscode/

@@ -1,0 +1,13 @@
+# Python — Stage-2 transformer ONLY (PLAN.md: Python only for the DL step).
+# The data/spatial/Stage-1 pipeline is R (renv.lock). Pin exact versions when A11 lands.
+
+# Core DL (choose one backend when A11 is implemented)
+torch>=2.2
+numpy>=1.26
+pandas>=2.2
+pyarrow>=15.0        # read model_dataset.parquet / per-cell sequences
+scikit-learn>=1.4    # metrics parity with R (PR-AUC, ROC-AUC, recall)
+pyyaml>=6.0          # read config.yaml
+
+# Optional pulls (only if a dataset is pulled from Python rather than R)
+# cdsapi>=0.6         # ERA5 via Copernicus CDS
