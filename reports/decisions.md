@@ -31,6 +31,18 @@ Format: `YYYY-MM-DD — <decision #/topic> — <old value> → <new value> — <
   likewise non-commercial — use only if venue permits, else omit. A-DOC has recorded both in
   source_set.md Limitations. (A9 to honor when spawned; A9 is currently gated behind A7.)
 
+- **2026-07-12 — GIS production model = the Stage-2 transformer (author directive).** PLAN M2/M3
+  default (§176, A9 §356) was: A9 builds off the **RF first** and swaps to the transformer **only if**
+  the transformer wins the hard (temporal/spatial) splits. **Author directive:** the published GIS
+  is intended to visualize the **transformer** forecast, not the RF. **Directive:** (1) A9 builds its
+  full map + intra-cell drill-down pipeline **now**, model-agnostically, validated against the RF as a
+  swappable backend, then **re-runs on the transformer once M3 (A11) lands**. (2) The honesty gate is
+  **unchanged** — the RF-vs-transformer head-to-head (same horizons, same three splits) is reported
+  plainly per §9; if the transformer does **not** beat RF on temporal/spatial, that null result is
+  stated in the results table and limitations regardless of which model the map renders. Choosing to
+  map the transformer as the product is a presentation decision, not license to hide a null comparison.
+  (author, via lead.)
+
 ## Open items flagged during scaffolding (2026-07-11, lead)
 
 - **HABSOS schema gap — RESOLVED (2026-07-11, A3 habsos-label).** The `occurrence.txt` was
