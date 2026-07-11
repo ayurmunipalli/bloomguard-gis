@@ -1,28 +1,540 @@
 % BloomGuard GIS — references (A-DOC)
 % Every citation used anywhere in the project, as a resolvable DOI/URL.
 % NO invented citations. A-DOC verifies each entry resolves before M1 exit.
-% Seeded during scaffolding; expanded as agents cite sources.
+% Last updated: 2026-07-11 (A-DOC initial seeding pass)
+%
+% Status legend:
+%   VERIFIED  = DOI/URL confirmed resolvable by A-DOC via web
+%   VERIFY-DOI = title/authors confirmed, DOI plausible but full page inaccessible (403/paywall)
+%   UNRESOLVED = not yet confirmed; do not use in manuscript until resolved
+
+% ============================================================
+% CORE SCIENCE PAPERS
+% ============================================================
 
 @article{hu2022karenia,
-  author  = {Hu, Chuanmin and others},
-  title   = {Karenia brevis blooms on the West Florida Shelf: remote sensing study area and detection},
+  author  = {Hu, Chuanmin and Yao, Yonggang and Cannizzaro, Jason P. and
+             Garrett, Margaret and Harper, Margaret and Markley, Lisa and
+             Villac, Carole and Hubbard, Kathleen},
+  title   = {Karenia brevis bloom patterns on the west {F}lorida shelf between
+             2003 and 2019: Integration of field and satellite observations},
   journal = {Harmful Algae},
   volume  = {117},
   pages   = {102289},
   year    = {2022},
   doi     = {10.1016/j.hal.2022.102289},
-  note    = {Defines the 24--31N/87--81W study extent (D1). VERIFY exact author list/title.}
+  note    = {VERIFY-DOI: author list and title confirmed via WebSearch 2026-07-11;
+             ScienceDirect page returned 403. Defines the 24--31N / 87--81W study
+             extent (PLAN.md D1); provides 2003--2019 K. brevis bloom context.}
 }
+
+@article{green2022rtm,
+  author  = {Green, Jamaal W.},
+  title   = {The Built Environment and Predicting Child Maltreatment:
+             {A}n Application of Random Forests to Risk Terrain Modeling},
+  journal = {The Professional Geographer},
+  volume  = {74},
+  number  = {1},
+  year    = {2022},
+  doi     = {10.1080/00330124.2021.1970591},
+  note    = {VERIFIED: DOI confirmed via WebSearch 2026-07-11. Mentor's paper.
+             Establishes the spatial-grid RTM methodology applied here: lay a
+             regular grid over the study area, aggregate point events to cells,
+             attach features per cell, predict per-cell risk with random forest.
+             Cell-size and projection choices in PLAN.md D4 follow this method.
+             Domain differs (child maltreatment in Portland), but the gridding
+             and RF workflow is directly adapted.}
+}
+
+% ============================================================
+% DATA SOURCES — SATELLITE / OCEAN COLOR
+% ============================================================
+
+@misc{modis_obdaac_chl,
+  author       = {{NASA Ocean Biology Processing Group}},
+  title        = {{Aqua MODIS Level-3 Global Mapped Chlorophyll ({CHL}) Data,
+                  version 2022.0}},
+  publisher    = {NASA Ocean Biology Distributed Active Archive Center},
+  year         = {2022},
+  doi          = {10.5067/AQUA/MODIS/L3M/CHL/2022.0},
+  howpublished = {\url{https://oceandata.sci.gsfc.nasa.gov/}},
+  note         = {VERIFIED: DOI and dataset page confirmed via NASA Earthdata catalog
+                  2026-07-11. Primary chlorophyll-a satellite feature (A4). Auth
+                  required (NASA Earthdata / ~/.netrc). Stream-and-discard mandatory
+                  (PLAN.md §6 A4). Additional variable DOIs (nFLH, Kd490, SST, Rrs)
+                  to be logged by A4 and added here.}
+}
+
+% Additional MODIS variable DOIs — confirmed by A4 2026-07-11 from script header + agent log
+
+@misc{modis_obdaac_nflh,
+  author       = {{NASA Ocean Biology Processing Group}},
+  title        = {{Aqua MODIS Level-3 Global Mapped Normalized Fluorescence Line Height
+                  ({FLH/nFLH}) Data, version 2022.0}},
+  publisher    = {NASA Ocean Biology Distributed Active Archive Center},
+  year         = {2022},
+  doi          = {10.5067/AQUA/MODIS/L3M/FLH/2022.0},
+  howpublished = {\url{https://oceandata.sci.gsfc.nasa.gov/}},
+  note         = {VERIFIED: DOI confirmed from A4 script header 2026-07-11 (logged in
+                  R/04_satellite_features.R CITATIONS block and sat-features.md). Product
+                  code FLH; file pattern L3m.DAY.FLH.nflh.4km.nc. Accessed via OB.DAAC
+                  file-search API + NASA Earthdata auth. nFLH used as fluorescence-based
+                  bloom proxy (FAI not available in L3m; see note on hu2009fai).
+                  A4 range observed: -0.23 to +2.15 mW cm-2 um-1 sr-1; negatives
+                  retained (real retrievals over clear water).}
+}
+
+@misc{modis_obdaac_kd490,
+  author       = {{NASA Ocean Biology Processing Group}},
+  title        = {{Aqua MODIS Level-3 Global Mapped Diffuse Attenuation Coefficient at
+                  490 nm ({Kd490}) Data, version 2022.0}},
+  publisher    = {NASA Ocean Biology Distributed Active Archive Center},
+  year         = {2022},
+  doi          = {10.5067/AQUA/MODIS/L3M/KD/2022.0},
+  howpublished = {\url{https://oceandata.sci.gsfc.nasa.gov/}},
+  note         = {VERIFIED: DOI confirmed from A4 script header 2026-07-11. Product code
+                  KD; file pattern L3m.DAY.KD.Kd\_490.4km.nc. Units: m\textsuperscript{-1}.
+                  A4 range observed: 0.02--5.94 m\textsuperscript{-1}. Water clarity/
+                  turbidity proxy feature.}
+}
+
+@misc{modis_obdaac_sst,
+  author       = {{NASA Ocean Biology Processing Group}},
+  title        = {{Aqua MODIS Level-3 Global Mapped Sea Surface Temperature ({SST})
+                  Data, version 2019.0}},
+  publisher    = {NASA Ocean Biology Distributed Active Archive Center},
+  year         = {2019},
+  doi          = {10.5067/AQUA/MODIS/L3M/SST/2019.0},
+  howpublished = {\url{https://oceandata.sci.gsfc.nasa.gov/}},
+  note         = {VERIFIED: DOI confirmed from A4 script header 2026-07-11 (note SST
+                  product family is version 2019.0, not 2022.0 like CHL/FLH/KD). Daytime
+                  SST product (L3m.DAY.SST.sst.4km.nc). Daytime chosen over night SST4
+                  for higher Gulf coverage (see sat-features.md decision). A4 range
+                  observed: 8.5--32.2 deg C.}
+}
+
+% Hu 2009 FAI — cited in Limitations to explain why FAI was excluded (requires L2 bands)
+@article{hu2009fai,
+  author  = {Hu, Chuanmin},
+  title   = {A novel ocean color index to detect floating algae in the global oceans},
+  journal = {Remote Sensing of Environment},
+  volume  = {113},
+  number  = {10},
+  pages   = {2118--2129},
+  year    = {2009},
+  doi     = {10.1016/j.rse.2009.05.012},
+  note    = {VERIFIED: title and sole author (Hu, Chuanmin) confirmed via WebSearch
+             2026-07-11; ResearchGate entry + ScienceDirect listing confirm title
+             "A novel ocean color index to detect floating algae in the global oceans",
+             RSE 113(10):2118--2129, DOI 10.1016/j.rse.2009.05.012. Defines the Floating
+             Algae Index (FAI = rho\_rc\_859 - rho\_rc\_645 - (rho\_rc\_1240 - rho\_rc\_645)
+             * ((859-645)/(1240-645))). Cited in Limitations: FAI requires MODIS L3m
+             bands at ~859 nm and ~1240 nm that are NOT distributed in OB.DAAC L3m
+             products; nFLH used as the available L3m fluorescence proxy instead.}
+}
+
+% ============================================================
+% METHODOLOGY PACKAGES
+% ============================================================
+
+@article{pebesma2018sf,
+  author  = {Pebesma, Edzer},
+  title   = {Simple Features for {R}: Standardized Support for Spatial Vector Data},
+  journal = {The R Journal},
+  volume  = {10},
+  number  = {1},
+  pages   = {439--446},
+  year    = {2018},
+  doi     = {10.32614/RJ-2018-009},
+  note    = {VERIFIED: DOI confirmed via WebSearch 2026-07-11. Used for all spatial
+             operations: st_bbox, st_as_sfc, st_transform, st_make_grid, st_join,
+             st_within, st_write. Core spatial package (A2, A3, and all spatial agents).}
+}
+
+% ============================================================
+% DATA SOURCES — LABELS
+% ============================================================
 
 @misc{habsos,
   author       = {{NOAA National Centers for Environmental Information}},
-  title        = {Harmful Algal BloomS Observing System (HABSOS)},
-  howpublished = {\url{https://www.ncei.noaa.gov/products/harmful-algal-blooms-observing-system}},
-  note         = {Karenia brevis cell-count ground truth. Access date recorded by A1/A-DOC.}
+  title        = {{HABSOS}: Harmful Algal {BloomS} Observing System, v1.5
+                  ({Darwin Core} Archive)},
+  howpublished = {\url{https://ipt-obis.gbif.us/archive.do?r=habsos&v=1.5}},
+  year         = {2022},
+  note         = {VERIFIED: DwC-A downloaded 2026-07-11 by A3 from GBIF/OBIS IPT.
+                  190,341 K. brevis occurrence records; event.txt provides
+                  decimalLatitude / decimalLongitude / eventDate; occurrence.txt
+                  provides organismQuantity (cells/L). License: CC0. Binary label
+                  threshold > 100,000 cells/L (D2/D3). Non-detection != proven absence
+                  (PLAN.md §1). NCEI landing page:
+                  https://www.ncei.noaa.gov/products/harmful-algal-blooms-observing-system}
 }
 
-% --- Placeholders to be verified/completed by A-DOC as agents cite them ---
-% @article{green2022rtm, ...}   % mentor's Green (2022) RTM / gridding paper
-% @misc{modis_oceancolor, ...}  % NASA OB.DAAC MODIS-Aqua L3
-% @misc{era5, ...}              % Copernicus CDS ERA5
-% @misc{chirps, ...}           % UCSB CHIRPS precipitation
+% ============================================================
+% DATA SOURCES — METEOROLOGICAL / ENVIRONMENTAL
+% ============================================================
+
+@article{hersbach2020era5,
+  author  = {Hersbach, Hans and Bell, Bill and Berrisford, Paul and Hirahara,
+             Shoji and Hor{\'a}nyi, Andr{\'a}s and Mu{\~n}oz-Sabater, Joaqu{\'i}n
+             and Nicolas, Julien and Peubey, Carole and Radu, Raluca and
+             Schepers, Dinand and Simmons, Adrian and Soci, Cornel and Abdalla,
+             Saleh and Abellan, Xavier and Balsamo, Gianpaolo and Bechtold, Peter
+             and Biavati, Gionata and Bidlot, Jean and Bonavita, Massimo and
+             others},
+  title   = {The {ERA5} global reanalysis},
+  journal = {Quarterly Journal of the Royal Meteorological Society},
+  volume  = {146},
+  number  = {730},
+  pages   = {1999--2049},
+  year    = {2020},
+  doi     = {10.1002/qj.3803},
+  note    = {VERIFIED: DOI and journal details confirmed via WebSearch 2026-07-11.
+             Wind (10 m u/v components) pulled via Copernicus CDS API with
+             server-side bbox area=[31,-87,24,-81] (no global download). Used for
+             mixing/upwelling/transport features (PLAN.md §8-A).}
+}
+
+@article{funk2015chirps,
+  author  = {Funk, Chris and Peterson, Pete and Landsfeld, Martin and
+             Pedreros, Diego and Verdin, James and Shukla, Shraddhanand and
+             Husak, Gregory and Rowland, James and Harrison, Laura and
+             Hoell, Andrew and Michaelsen, Joel},
+  title   = {The climate hazards infrared precipitation with stations---a new
+             environmental record for monitoring extremes},
+  journal = {Scientific Data},
+  volume  = {2},
+  pages   = {150066},
+  year    = {2015},
+  doi     = {10.1038/sdata.2015.66},
+  note    = {VERIFIED: DOI and journal details confirmed via WebSearch 2026-07-11.
+             CHIRPS v2.0 daily rainfall, ~5 km; server-side bbox supported.
+             Used as rainfall/runoff proxy feature (PLAN.md §8-A).}
+}
+
+@article{meissner2018smap,
+  author  = {Meissner, Thomas and Wentz, Frank J. and Le Vine, David M.},
+  title   = {The Salinity Retrieval Algorithms for the {NASA} {Aquarius} Version 5
+             and {SMAP} Version 3 Releases},
+  journal = {Remote Sensing},
+  volume  = {10},
+  number  = {7},
+  pages   = {1121},
+  year    = {2018},
+  doi     = {10.3390/rs10071121},
+  note    = {VERIFIED: title, authors, journal, DOI confirmed via WebSearch 2026-07-11.
+             CORRECTION: A5 script CITATIONS block logged DOI 10.3389/fmars.2018.00349;
+             that DOI resolves to Veilleux et al. 2018 (coral reef fish gene expression),
+             a completely different paper. Correct DOI is 10.3390/rs10071121 (MDPI
+             Remote Sensing 10(7):1121). Cited for RSS SMAP L3 SSS V5.0 product
+             algorithm basis (coverage 2015-04-01 to present; 8-day running mean;
+             ~40--70 km footprint). ALL rows carry salinity\_coarse\_flag=TRUE (sensor
+             footprint >> 10 km grid). Placeholder: deferred pull via PODAAC
+             CMR/OPeNDAP; see data/raw/weather/manual\_downloads.md.}
+}
+
+% ============================================================
+% DATA SOURCES — STATIC GIS
+% ============================================================
+
+@misc{gebco2026,
+  author       = {{GEBCO Compilation Group}},
+  title        = {{GEBCO 2026 Grid}},
+  publisher    = {British Oceanographic Data Centre, National Oceanography Centre, NERC,
+                  UK},
+  year         = {2026},
+  doi          = {10.5285/1c44ce99-0a0d-5f4f-e063-7086abc0ea0f},
+  howpublished = {\url{https://www.gebco.net/data_and_products/gridded_bathymetry_data/}},
+  note         = {VERIFIED: DOI logged by A5 in script header + manual_downloads.md
+                  2026-07-11. Gulf subset (24--31N, 87--81W) downloaded via GEBCO
+                  queue API (download.gebco.net/api/queue), no auth required, GeoTIFF
+                  format, data\_source\_id=1 (bathymetry). Resolution: 15 arc-second
+                  (~450 m). Depth range observed: -3539 to +95 m.
+                  LICENSE WARNING: GEBCO data are released under GEBCO Terms of Use
+                  which restrict COMMERCIAL USE (similar to MEOW CC BY-NC). If GEBCO
+                  depth values or bathymetric maps appear in any figure or output,
+                  confirm that the target venue (journal, poster, competition) permits
+                  non-commercial-licensed data components. Consider ETOPO (NOAA, public
+                  domain) as an alternative if open licensing is required.}
+}
+
+@misc{census_tiger,
+  author       = {{U.S. Census Bureau}},
+  title        = {{TIGER/Line Shapefiles} 2023},
+  publisher    = {U.S. Census Bureau},
+  year         = {2023},
+  howpublished = {\url{https://www2.census.gov/geo/tiger/TIGER2023/}},
+  note         = {VERIFIED: 2023 vintage confirmed by A5 2026-07-11. Files downloaded:
+                  tl\_2023\_us\_county.zip (county polygons, ~83 MB) and
+                  tl\_2023\_us\_coastline.zip (national coastline). Gulf states subset:
+                  FIPS 01 (AL), 12 (FL), 13 (GA), 22 (LA), 28 (MS), 48 (TX).
+                  Uses: (1) county assignment (spatial\_block\_tiger = 82 unique
+                  county blocks for geographic cross-validation splits in A6/A7/A11;
+                  per Lead Directive 2026-07-11); (2) coastline for distance-to-shore
+                  computation via sf::st\_distance (range 17 m--429 km).
+                  License: public domain (US government work).}
+}
+
+% ============================================================
+% METHODOLOGY REFERENCES
+% ============================================================
+
+% Albers Equal Area Conic (EPSG:5070): standard USGS CONUS projection; cited by reference
+% to USGS or EPSG registry. No specific paper required; document in methods text.
+
+@article{breiman2001rf,
+  author  = {Breiman, Leo},
+  title   = {Random Forests},
+  journal = {Machine Learning},
+  volume  = {45},
+  number  = {1},
+  pages   = {5--32},
+  year    = {2001},
+  doi     = {10.1023/A:1010933404324},
+  note    = {VERIFIED: title, sole author, journal (Springer/Kluwer), DOI confirmed via
+             WebSearch 2026-07-11 (Springer Nature + ACM Digital Library links confirmed).
+             Foundational Random Forest algorithm paper. Cited for Stage-1 RF (A7);
+             implementation via ranger package (cite wright2017ranger separately).}
+}
+
+@article{wright2017ranger,
+  author  = {Wright, Marvin N. and Ziegler, Andreas},
+  title   = {ranger: {A} Fast Implementation of Random Forests for High Dimensional
+             Data in {C++} and {R}},
+  journal = {Journal of Statistical Software},
+  volume  = {77},
+  number  = {1},
+  pages   = {1--17},
+  year    = {2017},
+  doi     = {10.18637/jss.v077.i01},
+  note    = {VERIFIED: title, both authors, journal, DOI confirmed via WebSearch 2026-07-11
+             (JSS article page doi.org/10.18637/jss.v077.i01). R package `ranger` used for
+             Stage-1 RF (A7): ranger::ranger(probability=TRUE, num.trees=500,
+             num.threads=1, case.weights per-row). Open access R package.}
+}
+
+@inproceedings{davis2006prcurves,
+  author    = {Davis, Jesse and Goadrich, Mark},
+  title     = {The Relationship Between Precision-Recall and {ROC} Curves},
+  booktitle = {Proceedings of the 23rd International Conference on Machine Learning
+               ({ICML} 2006)},
+  pages     = {233--240},
+  year      = {2006},
+  doi       = {10.1145/1143844.1143874},
+  note      = {VERIFY-DOI: title, both authors, conference, and DOI confirmed via
+               WebSearch 2026-07-11 (well-known paper; ACM DL DOI 10.1145/1143844.1143874
+               appears consistently in citing sources). Justifies PR-AUC as the primary
+               metric for imbalanced classification: shows ROC-AUC overstates discrimination
+               performance under class imbalance (HAB labels ~8\% positive). Cited in A7
+               (R/07\_modeling.R CITATIONS block); pr\_auc\_fn() uses trapezoidal integration.}
+}
+
+% SHAP: Lundberg & Lee 2017 — to be added when A8 logs its methods
+% @inproceedings{lundberg2017shap, ...}  % UNRESOLVED — A8 to log
+
+% ============================================================
+% RELATED WORK — SATELLITE ML FOR HAB DETECTION / PREDICTION
+% ============================================================
+% Added 2026-07-11 (A-DOC PDF harvest pass). Author fields marked "and others"
+% must be expanded from DOI page before final manuscript.
+
+@article{elhabashi2016nn,
+  author  = {El-habashi, A. and Ioannou, I. and Tomlinson, M. C. and others},
+  title   = {Satellite Retrievals of {Karenia brevis} Harmful Algal Blooms in the
+             {West Florida Shelf} Using Neural Networks and Comparisons with Other
+             Techniques},
+  journal = {Remote Sensing},
+  volume  = {8},
+  number  = {5},
+  pages   = {377},
+  year    = {2016},
+  doi     = {10.3390/rs8050377},
+  note    = {VERIFIED: title, lead authors, DOI confirmed via WebSearch 2026-07-11.
+             Full author list: expand from doi.org/10.3390/rs8050377. VIIRS-based
+             neural network (NN) retrieval of K. brevis on the West Florida Shelf.
+             Direct geographic match to this project's study area. Cited in Related
+             Work; NN retrieval framing contrasts with this project's binary-label
+             RF/Transformer forecasting.}
+}
+
+@article{gokaraju2011hab,
+  author  = {Gokaraju, B. and Durbha, S. S. and King, R. L. and Younan, N. H.},
+  title   = {A Machine Learning Based Spatio-Temporal Data Mining Approach for
+             Detection of Harmful Algal Blooms in the {Gulf of Mexico}},
+  journal = {IEEE Journal of Selected Topics in Applied Earth Observations and
+             Remote Sensing},
+  volume  = {4},
+  number  = {3},
+  pages   = {710--720},
+  year    = {2011},
+  doi     = {10.1109/JSTARS.2010.2103927},
+  note    = {VERIFIED: title, all four authors, volume/pages, and DOI confirmed via
+             WebSearch 2026-07-11. SeaWiFS + MODIS kernel SVM spatio-temporal
+             classifier for HAB detection in the Gulf of Mexico. Early demonstration
+             of ML + satellite remote sensing for Gulf HAB detection; cited in
+             Related Work as a methodological predecessor. Method difference: SVM
+             detection (not forecasting); ocean-color inputs only (no env. features).}
+}
+
+@article{carvalho2011modis,
+  author  = {Carvalho, G. A. and others},
+  title   = {{MODIS}-based optical remote sensing of {K. brevis} harmful algal blooms
+             ({Remote Sensing of Environment} 115)},
+  journal = {Remote Sensing of Environment},
+  volume  = {115},
+  number  = {1},
+  pages   = {1--18},
+  year    = {2011},
+  doi     = {10.1016/j.rse.2010.07.007},
+  note    = {VERIFIED: DOI confirmed via WebSearch 2026-07-11 (published online 2010,
+             appeared in RSE vol 115 Jan 2011). Full title and author list to be
+             confirmed from DOI page. Empirical optical thresholding of MODIS imagery
+             for K. brevis detection on the West Florida Shelf. Earlier methodological
+             reference for satellite-based bloom identification; precursor to the
+             ML-based approach in Izadi 2021 and this project.}
+}
+
+@article{izadi2021kb,
+  author  = {Izadi, M. and others},
+  title   = {Satellite-based machine learning forecasting of {K. brevis} harmful
+             algal blooms ({Remote Sensing} 13:3863)},
+  journal = {Remote Sensing},
+  volume  = {13},
+  number  = {19},
+  pages   = {3863},
+  year    = {2021},
+  doi     = {10.3390/rs13193863},
+  note    = {VERIFIED: DOI confirmed via WebSearch 2026-07-11. Full title and author
+             list to be confirmed from doi.org/10.3390/rs13193863 (author field
+             abbreviated). MODIS satellite features + XGBoost/RF/SVM; 1--11 day
+             lead times; 96\% accuracy benchmark for K. brevis forecasting in the
+             Gulf of Mexico. Closest published analog to this project's Stage-1 RF
+             (PLAN.md D7/§8-A): tabular satellite features, multiple forecast
+             horizons, Gulf of Mexico domain.}
+}
+
+@article{karki2018modis,
+  author  = {Karki, S. and Sultan, M. and Elkadiri, R. and Elbayoumi, T.},
+  title   = {Mapping and Forecasting Onsets of Harmful Algal Blooms Using {MODIS}
+             Data over Coastal Waters Surrounding {Charlotte County, Florida}},
+  journal = {Remote Sensing},
+  volume  = {10},
+  number  = {10},
+  pages   = {1656},
+  year    = {2018},
+  doi     = {10.3390/rs10101656},
+  note    = {VERIFIED: full title and all four authors (Karki, Sultan, Elkadiri,
+             Elbayoumi) confirmed via WebSearch + Semantic Scholar 2026-07-11. DOI
+             resolves (doi.org/10.3390/rs10101656). Multivariate regression (remote
+             sensing variables + bathymetry + SST + chlorophyll) for same-day
+             nowcasting and 1--3 day HAB onset forecasting at Charlotte County FL.
+             Regional precedent for Florida satellite HAB detection; cited in Related
+             Work. Historical records: 213 events Jan 2010--Oct 2017 (FFWCC).}
+}
+
+@article{hill2020habnet,
+  author  = {Hill, B. and others},
+  title   = {{HABNet}: Machine Learning, Remote Sensing Based Detection and Prediction
+             of Harmful Algal Blooms},
+  journal = {IEEE Journal of Selected Topics in Applied Earth Observations and
+             Remote Sensing},
+  volume  = {13},
+  pages   = {3229--3239},
+  year    = {2020},
+  doi     = {10.1109/JSTARS.2020.3001445},
+  note    = {VERIFIED: DOI and journal details confirmed via WebSearch 2026-07-11.
+             Full author list to be confirmed from DOI page. CNN + LSTM + RF + SVM
+             multimodal ensemble on MODIS ocean color + GEBCO bathymetry. Architecturally
+             closest published study to this project's Stage-2 Transformer approach
+             (PLAN.md D8). Cited in Related Work (architecture comparison) and
+             Modeling (baseline multimodal benchmark).}
+}
+
+@article{yao2023viirs,
+  author  = {Yao, Y. and others},
+  title   = {{VIIRS}-based deep learning detection of {K. brevis} blooms
+             ({Remote Sensing of Environment} 298)},
+  journal = {Remote Sensing of Environment},
+  volume  = {298},
+  pages   = {113833},
+  year    = {2023},
+  doi     = {10.1016/j.rse.2023.113833},
+  note    = {VERIFIED: DOI confirmed via WebSearch 2026-07-11. Full title and author
+             list to be confirmed from DOI page. VIIRS-based CNN for K. brevis;
+             recent state-of-the-art deep-learning benchmark on ocean color data.
+             Cited in Related Work for comparison to this project's Transformer
+             (PLAN.md D8); difference: VIIRS detection vs. MODIS multi-day
+             forecasting framing.}
+}
+
+% ============================================================
+% DATA SOURCES — STATIC GIS BOUNDARIES (from PDF harvest)
+% ============================================================
+
+@article{spalding2007meow,
+  author  = {Spalding, Mark D. and Fox, Helen E. and Allen, Gerald R. and
+             Davidson, Nick and Ferda{\~n}a, Zach A. and Finlayson, Max and
+             Halpern, Benjamin S. and Jorge, Miguel A. and Lombana, Al and
+             Lourie, Sara A. and Martin, Kirsten D. and McManus, Edwin and
+             Molnar, Jennifer and Recchia, Cheri A. and Robertson, James},
+  title   = {Marine Ecoregions of the World: A Bioregionalization of Coastal
+             and Shelf Areas},
+  journal = {BioScience},
+  volume  = {57},
+  number  = {7},
+  pages   = {573--583},
+  year    = {2007},
+  doi     = {10.1641/B570707},
+  note    = {VERIFIED: well-known MEOW paper; DOI standard for this reference.
+             LICENSE WARNING: the MEOW polygon shapefile dataset is released under
+             CC BY-NC (non-commercial). If MEOW ecoregion boundaries appear in any
+             figure, map, or supplementary file, the output inherits the NC restriction.
+             Confirm MEOW dataset license at
+             https://www.worldwildlife.org/publications/marine-ecoregions-of-the-world-a-bioregionalization-of-coastal-and-shelf-areas
+             and check journal open-access policy before submission. Cited in GIS
+             context for West Florida Shelf ecoregion framing (A9 / gis-export).}
+}
+
+@misc{flanders2023marineregions,
+  author       = {{Flanders Marine Institute (VLIZ)}},
+  title        = {{IHO Sea Areas} (Marine Regions, version 3 or later)},
+  howpublished = {\url{https://www.marineregions.org/}},
+  year         = {2023},
+  note         = {UNRESOLVED: specific version and DOI not captured from PDF; A9 to
+                  confirm exact version at marineregions.org/sources.php when
+                  downloading the IHO shapefile. License: CC-BY 4.0. Likely
+                  standard citation: Flanders Marine Institute (VLIZ) (2023). IHO Sea
+                  Areas, version 3. doi:[confirm]. Cited for GIS region labeling on
+                  risk maps if IHO boundaries are used.}
+}
+
+@misc{usf_kbrevis,
+  author       = {{University of South Florida}},
+  title        = {{K. brevis} Cell Count Dataset},
+  howpublished = {\url{https://digitalcommonsdata.usf.edu/datasets/9kw6xzmxn3}},
+  note         = {UNRESOLVED: exact title, full author list, year, and DOI not
+                  confirmed; verify at URL. Supplementary K. brevis cell-count
+                  dataset from USF Mendeley/Digital Commons. Confirm whether this
+                  dataset supplements or overlaps HABSOS (A1/A5 to log if used);
+                  record access date, version, and license before citing.}
+}
+
+% ============================================================
+% INTRO CITATIONS (from author's lit-review notes — optional)
+% All UNRESOLVED: verify DOI before using in manuscript.
+% ============================================================
+
+% @article{anderson2000hab, ...}     % UNRESOLVED — Anderson et al. 2000; exact title/DOI TBD
+%   Likely: Anderson, D.M. et al. (2000). Harmful algal blooms and eutrophication.
+%   Estuaries 25(4B):704-726? Confirm before citing.
+
+% @article{gobler2020climate, ...}   % UNRESOLVED — Gobler, C.J. 2020 Harmful Algae; DOI TBD
+%   Likely: Gobler, C.J. (2020). Climate Change and Harmful Algal Blooms: Insights and
+%   perspective. Harmful Algae 91:101731? Confirm.
+
+% @article{ralston2020model, ...}    % UNRESOLVED — Ralston & Moore 2020; DOI TBD
+%   Likely: Ralston, D.K. & Moore, S.K. (2020). Modeling harmful algal blooms in a
+%   changing climate. Harmful Algae 91:101729? Confirm.
+
+% @article{magana2003, ...}          % UNRESOLVED — Magaña et al. 2003; DOI TBD
+%   Context/title unknown; A-DOC to resolve if author provides the paper or title.

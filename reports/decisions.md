@@ -9,12 +9,35 @@ Format: `YYYY-MM-DD — <decision #/topic> — <old value> → <new value> — <
 
 - _(none yet — all §2 decisions stand as written in PLAN.md)_
 
+## Lead directives (implementation choices within §2, not changes to it)
+
+- **2026-07-11 — Spatial-split grouping method.** A2's `flag_spatial_clusters()` uses Queen
+  contiguity → the whole rectangular grid is one connected component (`n_clusters = 1`), which
+  is useless for spatial cross-validation. **Directive:** the spatial split (§9) must use
+  **geographic blocking**, not connected components. A6 (datacube) computes a `spatial_block`
+  label by either (a) spatial k-means on cell centroids into ~8–12 contiguous blocks, or
+  (b) assigning cells to TIGER counties/regions (once A5/A9 pull them). A7/A11 hold out whole
+  blocks; **R-SPLIT verifies adjacent cells don't straddle train/test using these blocks.**
+  The Queen-contiguity `spatial_cluster` column may stay as an adjacency diagnostic but is NOT
+  the split grouping. (grid-clean flagged this; lead decision.)
+
+## Lead directives (cont.)
+
+- **2026-07-11 — Bathymetry licensing for published figures.** A-DOC flagged that **GEBCO
+  (`gebco2026`) and MEOW (`spalding2007meow`) are NON-COMMERCIAL** licenses. **Directive:** GEBCO
+  `depth_m` and its derived features may be used freely for internal modeling/analysis, but for
+  any published map figure A9 must **prefer ETOPO (NOAA, public domain)** as the bathymetry basemap
+  unless the target venue explicitly permits non-commercial components. MEOW ecoregion overlays are
+  likewise non-commercial — use only if venue permits, else omit. A-DOC has recorded both in
+  source_set.md Limitations. (A9 to honor when spawned; A9 is currently gated behind A7.)
+
 ## Open items flagged during scaffolding (2026-07-11, lead)
 
-- **HABSOS export is Darwin Core `occurrence.txt` with only 12 columns** (id, basisOfRecord,
-  occurrenceID, organismQuantity, organismQuantityType, occurrenceStatus, eventID,
-  scientificNameID, scientificName, kingdom, genus, specificEpithet). It carries
-  `organismQuantity` (cell count) and `occurrenceStatus` (present/absent) but **no visible
-  coordinates or eventDate**. habsos-label (A3) + reviewer R3 must resolve where lat/lon/date
-  live (companion DwC-A files, verbatim.txt, or a re-pull with geo fields) before labels can
-  be built. Do not fabricate coordinates/dates — document the blocker if unresolved.
+- **HABSOS schema gap — RESOLVED (2026-07-11, A3 habsos-label).** The `occurrence.txt` was
+  only the *occurrence extension* of a Darwin Core Sampling Event Archive. The full DwC-A
+  (v1.5) was downloaded from `https://ipt-obis.gbif.us/archive.do?r=habsos&v=1.5` and
+  extracted to `data/raw/habsos/`. The `event.txt` (event core) carries `decimalLatitude`,
+  `decimalLongitude`, and `eventDate` for all 190,341 records. Join key:
+  `event.txt$id = occurrence.txt$eventID`. Resolution is documented in
+  `reports/agent_logs/habsos-label.md`. `habsos_labels.parquet` produced (IS_PLACEHOLDER=FALSE)
+  with 94,810 cell-day rows, 7,523 positive (HAB=1, 7.93%). No coordinates or dates fabricated.

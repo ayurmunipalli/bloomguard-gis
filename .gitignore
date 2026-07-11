@@ -10,6 +10,17 @@ data/raw/**
 !data/raw/**/manual_downloads.md
 !data/raw/**/.gitkeep
 
+# Processed data artifacts (regenerable by the R pipeline; some are large,
+# e.g. satellite_features.parquet ~300MB). Keep folder structure + docs only.
+data/processed/**
+!data/processed/**/
+!data/processed/**/.gitkeep
+
+# Reference PDFs (copyrighted source papers; harvested into references.bib,
+# not redistributed). Keep the folder placeholder only.
+paper/refs_pdfs/**
+!paper/refs_pdfs/.gitkeep
+
 # Large binary / geospatial artifacts
 *.tif
 *.tiff
