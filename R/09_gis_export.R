@@ -403,86 +403,107 @@ message("[A9] === Intra-cell attention drill-down (D12) ===")
 # NOTE(limitation): pixel-level trend fields omitted per sec. 2.3: noisiest at
 #                   native resolution due to cloud gaps. Only LEVEL fields shown.
 
-# Sub-functions: MODIS repull for a single date (from A4 recipe)
-# NOTE(cite): OB.DAAC file search API: https://oceandata.sci.gsfc.nasa.gov/api/file_search
+# Sub-functions: MODIS repull for a single date.
+# REPLICATES A4's exact authenticated mechanism (R/04_satellite_features.R lines 102-136).
+# KEY DIFFERENCE from previous attempt: uses /getfile/ endpoint directly (not search API),
+# single handle with followlocation + maxredirs handles the Earthdata OAuth redirect chain.
+# NOTE(cite): OB.DAAC getfile endpoint: https://oceandata.sci.gsfc.nasa.gov/getfile/
 
-build_obdaac_url <- function(date_chr, product = "CHL", var = "chlor_a") {
-  # NOTE(cite): MODIS-Aqua L3m filename: AQUA_MODIS.YYYYMMDD.L3m.DAY.<PROD>.<var>.4km.nc
-  date_nodash <- gsub("-", "", date_chr)
-  pattern     <- paste0("AQUA_MODIS.", date_nodash, ".L3m.DAY.", product, ".", var, ".4km.nc")
-  search_url  <- paste0(
-    "https://oceandata.sci.gsfc.nasa.gov/api/file_search",
-    "?sensor=MODISA&dtype=L3m&addurl=1&results_as_file=1",
-    "&search=", URLencode(pattern)
+OBDAAC_GET    <- "https://oceandata.sci.gsfc.nasa.gov/getfile/"
+D12_COOKIE_F  <- file.path(tempdir(), "urs_d12_cookies.txt")
+# Seed D12 cookie jar from any prior authenticated session (A4 or earlier runs).
+# This avoids the need for a fresh URS OAuth interactive redirect, which may
+# return a > 10 KB HTML login page instead of the NetCDF when scripted.
+# Priority: tmp-root urs_cookies.txt (persists across R sessions within the
+# same OS session) > tmp-root obdaac_cookies.txt > empty (auth from scratch).
+local({
+  candidates <- c(
+    file.path(dirname(tempdir()), "urs_cookies.txt"),
+    file.path(dirname(tempdir()), "obdaac_cookies.txt"),
+    file.path(tempdir(), "urs_cookies.txt")
   )
-  list(search_url = search_url, pattern = pattern)
+  for (f in candidates) {
+    if (file.exists(f) && !is.na(file.size(f)) && file.size(f) > 100L) {
+      file.copy(f, D12_COOKIE_F, overwrite = TRUE)
+      message("[A9-D12] Seeded cookie jar from: ", f)
+      break
+    }
+  }
+})
+
+# Products for D12 drill-down: CHL (primary) and nFLH (secondary level field).
+# NOTE(paper): pixel-level trend fields omitted per sec. 2.3 (noisiest at native res).
+#              Only LEVEL fields shown. FAI not available in L3m (A4 log, limitation).
+D12_PRODUCTS <- list(
+  list(prod = "CHL", var = "chlor_a", nc_var = "chlor_a", label = "chl_a_pixel"),
+  list(prod = "FLH", var = "nflh",    nc_var = "nflh",    label = "nflh_pixel")
+)
+
+#' Build direct /getfile/ URL for a MODIS L3m daily product (A4 pattern).
+#' NOTE(cite): filename convention: AQUA_MODIS.YYYYMMDD.L3m.DAY.<PROD>.<var>.4km.nc
+obdaac_getfile_url <- function(date_val, prod) {
+  ds <- format(as.Date(date_val), "%Y%m%d")
+  paste0(OBDAAC_GET, "AQUA_MODIS.", ds, ".L3m.DAY.", prod$prod, ".", prod$var, ".4km.nc")
 }
 
-download_modis_single <- function(date_chr, product = "CHL", var = "chlor_a",
-                                   raw_dir = tempdir()) {
-  # Attempt authenticated download via NASA Earthdata OAuth (~/.netrc).
-  # Returns path to downloaded .nc file, or NULL on failure.
-  # NOTE(paper): stream-and-discard -- caller MUST unlink() after use.
-  netrc <- path.expand("~/.netrc")
-  if (!file.exists(netrc)) {
-    message("[A9-D12] No ~/.netrc -- skipping MODIS repull")
-    return(NULL)
-  }
-  if (!requireNamespace("curl", quietly = TRUE)) {
-    message("[A9-D12] curl not available -- skipping MODIS repull")
-    return(NULL)
-  }
-  urls_list  <- build_obdaac_url(date_chr, product, var)
-  cookie_f   <- file.path(tempdir(), "urs_d12_cookies.txt")
-  result_f   <- tempfile(fileext = ".txt")
-
-  tryCatch({
-    h <- curl::new_handle()
-    curl::handle_setopt(h, netrc = 1L, netrc_file = netrc,
-                        cookiejar = cookie_f, cookiefile = cookie_f,
-                        followlocation = 1L, timeout = 60L)
-    curl::curl_download(urls_list$search_url, result_f, handle = h, quiet = TRUE)
+#' Authenticated MODIS download — exact A4 handle setup (lines 107-136 of 04_satellite_features.R).
+#' Uses /getfile/ endpoint + netrc + cookies + followlocation + maxredirs.
+#' Returns destfile on success (file.size >= 10000), NULL on failure.
+#' NOTE(paper): stream-and-discard — caller MUST unlink(destfile) after use.
+download_modis_a4 <- function(url, destfile,
+                               cookie_file = D12_COOKIE_F,
+                               netrc_file  = path.expand("~/.netrc"),
+                               timeout     = 300L) {
+  h <- curl::new_handle()
+  curl::handle_setopt(h,
+    netrc           = 1L,
+    netrc_file      = netrc_file,
+    cookiefile      = cookie_file,
+    cookiejar       = cookie_file,
+    followlocation  = 1L,
+    maxredirs       = 10L,
+    timeout         = timeout,
+    low_speed_limit = 1024L,
+    low_speed_time  = 60L
+  )
+  ok <- tryCatch({
+    curl::curl_download(url, destfile, handle = h, quiet = TRUE)
+    sz <- file.size(destfile)
+    if (is.na(sz) || sz < 10000L) {    # < 10 KB -> auth error page, not a NetCDF
+      unlink(destfile)
+      message("[A9-D12] Auth/size check failed for ", basename(url),
+              " (size=", if (is.na(sz)) "NA" else sz, " bytes) -- likely redirect HTML")
+      return(FALSE)
+    }
+    TRUE
   }, error = function(e) {
-    message("[A9-D12] File search API error: ", e$message); return(NULL)
+    unlink(destfile)
+    message("[A9-D12] curl error: ", e$message)
+    FALSE
   })
-
-  if (!file.exists(result_f)) return(NULL)
-  lines     <- readLines(result_f, warn = FALSE)
-  file_urls <- grep("^https?://.*\\.nc$", lines, value = TRUE)
-  if (length(file_urls) == 0) {
-    message("[A9-D12] No .nc found for ", date_chr, " product=", product)
-    return(NULL)
-  }
-
-  dest <- file.path(raw_dir, basename(file_urls[1]))
-  tryCatch({
-    h2 <- curl::new_handle()
-    curl::handle_setopt(h2, netrc = 1L, netrc_file = netrc,
-                        cookiejar = cookie_f, cookiefile = cookie_f,
-                        followlocation = 1L, timeout = 300L,
-                        low_speed_limit = 1024L, low_speed_time = 30L)
-    message("[A9-D12] Downloading ", basename(file_urls[1]), " ...")
-    curl::curl_download(file_urls[1], dest, handle = h2, quiet = FALSE)
-    message("[A9-D12] Downloaded: ", round(file.size(dest) / 1e6, 1), " MB")
-    dest
-  }, error = function(e) {
-    message("[A9-D12] Download error: ", e$message)
-    if (file.exists(dest)) unlink(dest)
-    NULL
-  })
+  if (ok) destfile else NULL
 }
 
+#' Load native-resolution raster, crop to study bbox, project to analysis CRS.
+#' Handles multi-layer NetCDF (selects by nc_var name, like A4's aggregate_to_grid).
+#' Does NOT aggregate -- returns pixel-level SpatRaster.
 get_pixel_raster <- function(nc_path, bbox_cfg, crs_proj = "EPSG:5070",
-                              var_name = "chlor_a") {
-  # Returns native-resolution raster cropped+projected, NOT aggregated.
+                              nc_var = "chlor_a") {
   if (is.null(nc_path) || !file.exists(nc_path)) return(NULL)
   tryCatch({
-    r       <- terra::rast(nc_path, subds = var_name)
+    r <- terra::rast(nc_path)
+    # Select correct layer when NetCDF has multiple (e.g. SST has sst + qual_sst)
+    if (terra::nlyr(r) > 1) {
+      idx <- which(names(r) == nc_var)
+      if (length(idx) == 0L) idx <- 1L
+      r <- r[[idx[1]]]
+    }
     study_e <- terra::ext(bbox_cfg$xmin, bbox_cfg$xmax, bbox_cfg$ymin, bbox_cfg$ymax)
     r_crop  <- terra::crop(r, study_e)
+    names(r_crop) <- nc_var
     terra::project(r_crop, crs_proj, method = "bilinear")
   }, error = function(e) {
-    message("[A9-D12] Raster error: ", e$message); NULL
+    message("[A9-D12] Raster load/project error: ", e$message); NULL
   })
 }
 
@@ -496,7 +517,9 @@ if (nrow(flagged_sf) > 0) {
   d12_raw <- file.path(tempdir(), "d12_raw")
   dir.create(d12_raw, showWarnings = FALSE)
 
-  nc_chl <- download_modis_single(as.character(MAP_DATE), "CHL", "chlor_a", d12_raw)
+  url_chl  <- obdaac_getfile_url(MAP_DATE, D12_PRODUCTS[[1]])
+  dest_chl <- file.path(d12_raw, basename(url_chl))
+  nc_chl   <- download_modis_a4(url_chl, dest_chl)
 
   if (!is.null(nc_chl)) {
     r_chl <- get_pixel_raster(nc_chl, bbox_cfg)
@@ -676,19 +699,27 @@ make_zone_popup <- function(df) {
 }
 
 make_att_popup <- function(df) {
-  is_ph <- isTRUE(df$IS_PLACEHOLDER)
-  conv  <- if (!is_ph && !is.na(df$is_convergence) && isTRUE(df$is_convergence))
-    "<b style='color:darkred'>CONVERGENCE: elevated chl-a + shallow + nearshore</b><br>"
-  else ""
+  # Vectorized: df may be the full attention data.frame (one row per pixel).
+  is_ph <- !is.null(df$IS_PLACEHOLDER) & isTRUE(df$IS_PLACEHOLDER[1])
+  conv  <- ifelse(
+    !is_ph & !is.na(df$is_convergence) & df$is_convergence %in% TRUE,
+    "<b style='color:darkred'>CONVERGENCE: elevated chl-a + shallow + nearshore</b><br>",
+    ""
+  )
+  body_real <- paste0(
+    "<b>chl-a (pixel):</b> ",
+    ifelse(is.na(df$chl_a_pixel), "NA", sprintf("%.2f mg/m3", df$chl_a_pixel)), "<br>",
+    "<b>Elevated chl-a?</b> ", df$is_chl_elevated %in% TRUE, "<br>",
+    "<b>Shallow cell?</b> ",   df$is_shallow     %in% TRUE, "<br>",
+    "<b>Nearshore cell?</b> ", df$is_nearshore    %in% TRUE, "<br>"
+  )
+  body <- ifelse(is_ph,
+    "<i>(placeholder -- MODIS repull pending credentials)</i><br>",
+    body_real
+  )
   paste0(
-    "<b>INTRA-CELL ATTENTION (DIAGNOSTIC)</b><br>", conv,
-    if (!is_ph) paste0(
-      "<b>chl-a (pixel):</b> ",
-      ifelse(is.na(df$chl_a_pixel), "NA", sprintf("%.2f mg/m3", df$chl_a_pixel)), "<br>",
-      "<b>Elevated chl-a?</b> ", isTRUE(df$is_chl_elevated), "<br>",
-      "<b>Shallow cell?</b> ", isTRUE(df$is_shallow), "<br>",
-      "<b>Nearshore cell?</b> ", isTRUE(df$is_nearshore), "<br>"
-    ) else "<i>(placeholder -- MODIS repull pending credentials)</i><br>",
+    "<b>INTRA-CELL ATTENTION (DIAGNOSTIC)</b><br>",
+    conv, body,
     "<hr><small style='color:grey'>",
     df$diagnostic_label, "<br>", df$data_floor_note, "</small>"
   )

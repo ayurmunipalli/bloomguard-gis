@@ -13,7 +13,7 @@
 - **RISK_THRESHOLD = 0.40**: P(HAB=1) threshold for priority zones. Prioritizes recall per PLAN sec. 9. Yields 13 flagged cells on MAP_DATE. -- 2026-07-12
 - **Feature pipeline IDENTICAL to A7**: same LOG_FEATURES, ALWAYS_EXCLUDE, train-median imputation from backend$train_medians. Enforced via apply_feature_pipeline() using the backend object. Any mismatch silently corrupts predictions. -- 2026-07-12
 - **ETOPO preference (decisions.md 2026-07-11)**: GEBCO is non-commercial. CartoDB.Positron used for leaflet tiles (non-commercial safe). Published static figures must use ETOPO 2022 (NOAA NCEI, public domain). Documented in script and map attribution. -- 2026-07-12
-- **Intra-cell attention (D12/sec. 2.3)**: MODIS repull attempted for MAP_DATE. PLACEHOLDER -- no ~/.netrc credentials. IS_PLACEHOLDER=TRUE in output. Convergence: chl-a >= 75th pctile within cell AND depth > -30m AND dist_to_shore < 25km. LEVEL field only (no pixel-level trend fields per sec. 2.3). -- 2026-07-12
+- **Intra-cell attention (D12/sec. 2.3)**: MODIS repull attempted for MAP_DATE. SUCCESS -- native ~4km pixels extracted for 13 flagged cells. Convergence: chl-a >= 75th pctile within cell AND depth > -30m AND dist_to_shore < 25km. LEVEL field only (no pixel-level trend fields per sec. 2.3). -- 2026-07-12
 - **D12 honesty labels**: every drill-down view labeled 'FEATURE CONCENTRATION (DIAGNOSTIC)'. Nothing rendered below native ~4km MODIS pixel. H=7 precursor-drift caveat in popup and HTML panel. -- 2026-07-12
 - **Transformer re-run pending**: author directive (decisions.md 2026-07-12) -- published GIS will use Stage-2 transformer. RF is validated swappable placeholder until M3. Re-run = change MODEL_PATH, source 09_gis_export.R. -- 2026-07-12
 
