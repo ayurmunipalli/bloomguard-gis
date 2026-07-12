@@ -6,6 +6,12 @@
 `data/processed/static_geo.parquet`, `outputs/tables/model_results.csv`,
 `reports/agent_logs/modeling.md`, `reports/agent_logs/R6-datacube-review.md`, `reports/decisions.md`
 **Date:** 2026-07-11
+**Correction (2026-07-12, lead):** The held-out block `12_115` was originally mislabeled here as
+"Collier County." Verified against `static_geo.parquet` (TIGER `county_name`), `12_115` = **Sarasota
+County** (largest block, ~11.4% prevalence — the prevalence artifact driving spatial-split PR-AUC).
+All "Collier County" references for `12_115` in this log have been corrected to Sarasota. (Collier is
+`12_021`, a separate, lower-prevalence block.) The prevalence-confound conclusion is unchanged; only
+the county name was wrong.
 
 ---
 
@@ -27,7 +33,7 @@ annotate/caveat in the decision log and in the paper material; neither requires 
 
 ### What was reconstructed
 
-A7's spatial split holds out **block 12_115 (Collier County)** as the sole test fold for every
+A7's spatial split holds out **block 12_115 (Sarasota County)** as the sole test fold for every
 horizon H ∈ {1,3,5,7,14}. This is correct behavior: `merge_tiny_blocks()` merges the two
 singleton blocks (12_083, 12_077, 1 row each) into the largest block (12_115), which then always
 satisfies the ≥15% greedy threshold alone:
@@ -45,7 +51,7 @@ structure; the test region is not fragmented or interleaved with training.
 
 ### Adjacency quantification
 
-Computed haversine distances from every test cell centroid (Collier County, n=89) to the nearest
+Computed haversine distances from every test cell centroid (Sarasota County, n=89) to the nearest
 training cell centroid. All nearest-neighbor pairs are in adjacent counties (12_015 = Hendry
 County, 12_081 = Lee County).
 
@@ -85,7 +91,7 @@ in the review mandate.
 
 **Root cause identified: test-set prevalence inflation, not primarily code leakage.**
 
-Collier County (12_115) is the most-sampled HAB hotspot in the HABSOS archive. The greedy
+Sarasota County (12_115) is the most-sampled HAB hotspot in the HABSOS archive. The greedy
 largest-block selection therefore creates a test set with a systematically higher positive rate
 than the random test set:
 
@@ -113,7 +119,7 @@ evidence of geographic generalizability.
 ### Required action for A7 (documentation, not re-run)
 
 Add to A7 decision log and NOTE(paper) tag:
-> The spatial split holds out only Collier County (12_115), which has 1.4–1.5× the HAB positive
+> The spatial split holds out only Sarasota County (12_115), which has 1.4–1.5× the HAB positive
 > rate of the rest of the training data. Spatial PR-AUC is inflated relative to random (and to
 > temporal) primarily by this prevalence difference, not because the model generalizes better
 > to held-out geography. County-border cells also exhibit structural spatial autocorrelation
@@ -192,7 +198,7 @@ Confirmed from code (`R/07_modeling.R:224–233`) and data:
 
 - 12_083: 1 row in cube → merged into `target = names(cnt)[which.max(cnt)]`
 - 12_077: 1 row in cube → merged into same target
-- Largest block = **12_115** (Collier County, 11,018 rows in full cube; ~6,500 in H=7 subset)
+- Largest block = **12_115** (Sarasota County, 11,018 rows in full cube; ~6,500 in H=7 subset)
 - Both singleton blocks are merged into 12_115, which is the held-out test block
 
 Net effect: the singletons become part of the test fold. This is correct — they cannot be
@@ -211,7 +217,7 @@ loses no valid rows.
 2. **A7 decision log**: add the two caveats from Checks 1 and 2.
 3. **For the paper**: the temporal split (0.498 PR-AUC at H=7) is the headline honest number;
    spatial PR-AUC (0.663) must not be presented as evidence of geographic generalizability
-   without noting the Collier County prevalence confound.
+   without noting the Sarasota County prevalence confound.
 
 No re-run of modeling is required. The feature exclusions are clean and complete. The split
 construction code is structurally sound.
