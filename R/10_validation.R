@@ -103,7 +103,9 @@ ALWAYS_EXCLUDE <- c(
   "sat_IS_PLACEHOLDER", "env_IS_PLACEHOLDER",
   "static_IS_PLACEHOLDER", "label_IS_PLACEHOLDER",
   "sat_feature_filled", "env_feature_filled",
-  "wind_u_ms", "wind_v_ms", "wind_speed_ms", "wind_dir_deg",
+  # NOTE(paper): must mirror 07_modeling.R's ALWAYS_EXCLUDE exactly, since A10 recreates
+  # the model's train/test split and feature set. ERA5 wind is REAL as of 2026-07-12 and
+  # deliberately not excluded; CHIRPS/SMAP remain placeholder and stay excluded.
   "precip_mm", "salinity_pss"
 )
 

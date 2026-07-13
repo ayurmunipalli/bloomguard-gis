@@ -43,8 +43,9 @@
 #   derived columns are NA for the remaining ~5579 dates. satellite_missing=TRUE
 #   marks these rows. Re-run after A4 MODIS pull completes.
 #
-# NOTE(limitation): Environmental features for ERA5 wind, CHIRPS precip, and
-#   SMAP salinity are PLACEHOLDER (NA). See data/raw/weather/manual_downloads.md.
+# NOTE(paper): as of 2026-07-12, ERA5 wind (speed/direction/along-cross-shore, 2003-2021)
+#   is REAL. CHIRPS precip and SMAP salinity remain PLACEHOLDER (NA) — see
+#   data/raw/weather/manual_downloads.md and reports/agent_logs/env-features.md.
 #   Seasonality (month, doy_sin, doy_cos) is real by construction.
 #
 # NOTE(limitation): HABSOS non-detection ≠ proven absence. IS_ABSENCE_UNCERTAIN
@@ -521,6 +522,8 @@ cat("  Written:", p_out, "\n")
 cat("  File size:", sz_mb, "MB\n")
 cat("  Rows:", nrow(base), " | Cols:", ncol(base), "\n")
 cat("\n*** STATUS: FINAL — full MODIS satellite coverage (5829 dates, satellite_missing=0) ***\n")
-cat("    IS_PLACEHOLDER_ROW=100% because env dynamic features (ERA5/CHIRPS/SMAP) are\n")
-cat("    still placeholder (A5 blocker). Satellite data is fully real (sat_IS_PLACEHOLDER=0).\n")
+cat(sprintf("    IS_PLACEHOLDER_ROW = TRUE for %.1f%% of rows.\n",
+            100 * mean(base$IS_PLACEHOLDER_ROW, na.rm = TRUE)))
+cat("    env_IS_PLACEHOLDER = wind_is_placeholder & precip_is_placeholder & salinity_is_placeholder\n")
+cat("    (see reports/agent_logs/env-features.md for which of the three are real as of this run).\n")
 cat("=== 06_build_datacube.R: DONE ===\n")

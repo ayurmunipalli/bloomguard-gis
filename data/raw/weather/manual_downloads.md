@@ -10,31 +10,28 @@ Follow these steps to populate real data for placeholders in `environmental_feat
 
 ## ERA5 10m Wind (u/v components) — Copernicus CDS API
 
-**Status:** PLACEHOLDER (no ~/.cdsapirc found on this machine)
+**Status:** REAL — pulled via Copernicus CDS `derived-era5-single-levels-daily-statistics`
+(bilinear-extracted to 1616 cells x 10451 dates; see reports/agent_logs/env-features.md)
 **Cite:** Hersbach et al. (2020) doi:10.1002/qj.3803
-**Coverage:** 1979-01-01 to present, ~0.25° (~28 km), daily
+**Coverage:** 1979-01-01 to present, ~0.25° (~28 km), daily-mean via CDS server-side aggregation
 
-### Steps to pull:
+### Steps to pull (already implemented in R/05_environmental_features.R Section E):
 1. Register at https://cds.climate.copernicus.eu/ (free account)
-2. Accept Terms of Use for ERA5 datasets
-3. Copy your API key to `~/.cdsapirc`:
+2. Accept the licence for BOTH datasets used (each CDS catalog entry has its own licence gate):
+   - https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels?tab=download#manage-licences
+   - https://cds.climate.copernicus.eu/datasets/derived-era5-single-levels-daily-statistics?tab=download#manage-licences
+3. Copy your Personal Access Token to `~/.cdsapirc`:
    ```
    url: https://cds.climate.copernicus.eu/api
-   key: <your-key>
+   key: <your-PAT>
    ```
-4. Install the Python cdsapi client: `pip install cdsapi`
-5. Run the pull script (to be implemented in R/05_environmental_features.R Section E):
-   - Variable: 10m_u_component_of_wind, 10m_v_component_of_wind
-   - Product type: reanalysis
-   - Format: netCDF
-   - Area: [31, -87, 24, -81]  (N, W, S, E — server-side Gulf bbox, do NOT download globally)
-   - Date range: 1979-01-01 to 2021-12-31
-   - Target: data/raw/weather/era5_wind_gulf.nc
-6. Re-run R/05_environmental_features.R; it detects the file and populates wind columns.
+4. R package `ecmwfr` handles auth + the async job/poll/download flow (installed via renv).
+5. Re-run R/05_environmental_features.R; Section E pulls per-year daily-mean u10/v10,
+   bilinearly extracts to cell centroids, and derives speed/direction/along-cross-shore.
 
 ### Note on along-shore / cross-shore components:
 West Florida Shelf shoreline orientation ≈ 350° (NNW). Along-shore wind ≈ component parallel
-to coast; cross-shore ≈ perpendicular. Derive after ERA5 pull:
+to coast; cross-shore ≈ perpendicular. Derived as:
   along  = u * cos(shore_angle) + v * sin(shore_angle)
   cross  = -u * sin(shore_angle) + v * cos(shore_angle)
 
@@ -42,7 +39,10 @@ to coast; cross-shore ≈ perpendicular. Derive after ERA5 pull:
 
 ## CHIRPS v2.0 Daily Precipitation — UCSB CHC
 
-**Status:** PLACEHOLDER (HTTP 403 CrowdSec block during automated pull 2026-07-11)
+**Status:** PLACEHOLDER (HTTP 403 CrowdSec ban re-triggered by the automated pull loop —
+confirmed via response body containing 'CrowdSec Ban'; a single lightweight HEAD-request
+liveness check can return 200 while the sustained GET loop still gets banned within seconds.
+Per lead directive this is logged and NOT retried further this run.)
 **Cite:** Funk et al. (2015) doi:10.1038/sdata.2015.66
 **Coverage:** 1981-01-01 to 2021-12-31 (for HABSOS overlap), ~0.05° (~5 km), daily
 
@@ -54,15 +54,17 @@ to coast; cross-shore ≈ perpendicular. Derive after ERA5 pull:
    b. r <- rast(url); r_crop <- crop(r, ext(-87,-81,24,31))
    c. vals <- extract(r_crop, grid_vect, fun=mean, na.rm=TRUE)
    d. Append to checkpoint parquet; no raw tif saved to disk.
-4. Wait 24h after a CrowdSec block before retrying (or use a different IP).
-5. Re-run R/05_environmental_features.R — it resumes from the checkpoint.
+4. Wait well over 24h after a CrowdSec ban before retrying, ideally from a different egress IP —
+   a lightweight HEAD-request liveness check passing does NOT mean the ban has lifted for GETs.
+5. Re-run R/05_environmental_features.R — it resumes from the checkpoint
+   (checkpoint only records genuinely-successful rows, so failed dates are retried automatically).
 
 ---
 
 ## SMAP Sea-Surface Salinity — RSS/PODAAC
 
 **Status:** PLACEHOLDER (complex OPeNDAP auth; deferred)
-**Cite:** Meissner et al. (2018) doi:10.3389/fmars.2018.00349
+**Cite:** Meissner et al. (2018) doi:10.3390/rs10071121
 **Coverage:** 2015-04-01 to present, ~0.25° (40–70 km sensor footprint), 8-day running mean
 **IMPORTANT:** salinity_coarse_flag=TRUE on ALL values — broad-context feature only.
 

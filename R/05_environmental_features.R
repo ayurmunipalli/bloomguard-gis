@@ -18,7 +18,9 @@
 #   - GEBCO 2026 bathymetry via queue API; zonal mean (terra::extract) per cell
 #   - Distance-to-shore: TIGER US coastline → st_distance from cell centroids to coast
 #   - CHIRPS v2.0 daily precipitation: vsicurl streaming (no local copy); 403/block → placeholder
-#   - ERA5 10m wind: requires ~/.cdsapirc (Copernicus CDS key) → placeholder if absent
+#   - ERA5 10m wind: Copernicus CDS "derived-era5-single-levels-daily-statistics" dataset
+#                    (ecmwfr, requires ~/.cdsapirc); per-year requests, bilinear extract to
+#                    cell centroids, along/cross-shore rotation. Placeholder if key absent.
 #   - SMAP L3 sea-surface salinity: requires Earthdata ~/.netrc; coarse 40–70 km → placeholder
 #   - Seasonality (month, doy, sin/cos) always computed from date
 #   - IS_PLACEHOLDER column per feature family; feature_filled reserved for A6 forward-fill
@@ -327,13 +329,25 @@ msg("=== SECTION D: CHIRPS precipitation ===")
 
 chirps_ok <- FALSE
 precip_dt  <- NULL
+n_ok <- 0L; n_fail <- 0L
+
+# NOTE(paper): BLOOMGUARD_SKIP_CHIRPS_RETRY lets an operator skip straight to the
+#              placeholder when a CrowdSec ban was JUST confirmed minutes earlier in the
+#              same session — a HEAD-request liveness check can return 200 while the
+#              server still bans sustained GET loops (observed 2026-07-12), so retrying
+#              immediately after a known-fresh ban just burns time and risks extending it.
+#              Unset (default) = normal behavior, always attempt the live pull.
+skip_chirps_retry <- toupper(Sys.getenv("BLOOMGUARD_SKIP_CHIRPS_RETRY", "FALSE")) == "TRUE"
 
 # Test server availability first (HEAD request is lightweight)
 chirps_test_url <- paste0(
   "https://data.chc.ucsb.edu/products/CHIRPS-2.0/global_daily/tifs/p05/",
   "1990/chirps-v2.0.1990.01.01.tif.gz")
 
-chirps_available <- tryCatch({
+chirps_available <- if (skip_chirps_retry) {
+  msg("  BLOOMGUARD_SKIP_CHIRPS_RETRY=TRUE — skipping live pull (recent confirmed ban).")
+  FALSE
+} else tryCatch({
   resp <- system(
     paste0("curl -s -o /dev/null -w '%{http_code}' -I '", chirps_test_url, "'"),
     intern = TRUE)
@@ -431,42 +445,240 @@ if (!chirps_ok || is.null(precip_dt)) {
 
 # ── 6. SECTION E: ERA5 Wind (dynamic, requires ~/.cdsapirc) ───────────────────
 # NOTE(cite): Hersbach et al. (2020) ERA5 10m U/V wind. doi:10.1002/qj.3803
-#             Copernicus CDS. Coverage 1979–present. Gulf bbox area=[31,-87,24,-81].
-# NOTE(limitation): ERA5 requires Copernicus CDS API key in ~/.cdsapirc. Key absent on
-#                   this machine → placeholder. See data/raw/weather/manual_downloads.md.
+#             Copernicus CDS, dataset "derived-era5-single-levels-daily-statistics"
+#             (server-side daily-mean aggregation from 6-hourly samples; confirmed via
+#             the process /processes/{id} schema — one year per request, "year" is a
+#             scalar enum, not an array, so the pull loops per calendar year).
+#             Gulf bbox area=[31,-87,24,-81] requested server-side (CLAUDE.md: ERA5
+#             supports bbox subsetting — no global download).
+# NOTE(paper): Along-shore/cross-shore components computed via axis rotation using the
+#              West Florida Shelf shoreline azimuth (~350° from north, NNW), per the
+#              derivation already logged in data/raw/weather/manual_downloads.md:
+#              along = u*cos(theta) + v*sin(theta); cross = -u*sin(theta) + v*cos(theta).
+# NOTE(limitation): ERA5 native grid is ~0.25 deg (~28 km) — coarser than the 10 km cell
+#              grid. Values are bilinearly interpolated to cell centroids (terra::extract,
+#              method="bilinear"), not simple nearest-neighbor, to avoid blocky artifacts.
+# NOTE(paper): Per lead directive for this run, an ERA5 pull failure (auth/licence/API)
+#              throws a hard error (stop()) instead of silently degrading to a placeholder,
+#              so the blocker surfaces immediately rather than being masked by fallback
+#              data. This is a deliberate, run-specific override of the project's normal
+#              placeholder-on-blocker convention (PLAN.md §1) for this env-features pass.
+# NOTE(paper): Pulled per (year, month), not per year. A live full-calendar-year request
+#              (12 months x ~31 days x 2 vars, 6-hourly frequency) hit CDS's per-request
+#              cost/size limit ("Your request is too large, please reduce your selection")
+#              even though the bbox is tiny — confirmed empirically (a full year failed;
+#              a single month of the same variables/area/frequency succeeded). Monthly
+#              requests are also finer-grained checkpoints (closer to the "resumable,
+#              checkpoint by date" spirit than one giant per-year job).
+# NOTE(paper): Restricted to the satellite era (>= ERA5_MIN_DATE, matching A6's
+#              SAT_ERA_START = 2003-01-01) rather than the full HABSOS label range (which
+#              goes back to 1953). Pre-2003 label rows have no MODIS satellite features and
+#              are dropped in A6's join regardless, so pulling ERA5 wind for them would be
+#              pure waste of CDS request quota and wall-clock time.
 
-msg("=== SECTION E: ERA5 wind (credential check) ===")
+msg("=== SECTION E: ERA5 wind ===")
 
 era5_ok   <- FALSE
 cds_file  <- path.expand("~/.cdsapirc")
 wind_dt   <- NULL
 
+SHORE_ANGLE_DEG <- 350                      # West Florida Shelf shoreline azimuth (NNW)
+shore_theta     <- SHORE_ANGLE_DEG * pi / 180
+
+era5_ckpt_dir <- proj_path("data/raw/weather/era5_checkpoints")
+dir.create(era5_ckpt_dir, recursive = TRUE, showWarnings = FALSE)
+
 if (file.exists(cds_file)) {
-  msg("  ~/.cdsapirc found — ERA5 pull would proceed here (not yet implemented).")
-  # TODO(A5): Implement cdsapi-based ERA5 pull when cdsapirc is available.
-  # Pull: u10, v10 wind at 0.25° for the Gulf box, daily means 1979–2021.
-  # Then: zonal extract per cell (interpolate coarse ~28 km ERA5 grid to 10 km cells).
-  era5_ok <- FALSE   # implementation deferred; set TRUE once fully coded
+  msg("  ~/.cdsapirc found. Pulling ERA5 10m u/v wind via Copernicus CDS ...")
+
+  suppressWarnings(suppressMessages({
+    if (!requireNamespace("ecmwfr", quietly = TRUE)) {
+      install.packages("ecmwfr", repos = "https://cloud.r-project.org", quiet = TRUE)
+    }
+    library(ecmwfr)
+  }))
+
+  cds_key <- trimws(sub("^key:", "", grep("^key:", readLines(cds_file), value = TRUE)[1]))
+  wf_set_key(key = cds_key)
+
+  ERA5_MIN_DATE <- as.Date("2003-01-01")   # matches A6's SAT_ERA_START
+  era5_dates_in_scope <- cell_dates$date[cell_dates$date >= ERA5_MIN_DATE]
+  era5_yms <- unique(format(era5_dates_in_scope, "%Y-%m"))
+  era5_yms <- era5_yms[order(era5_yms)]
+  msg(sprintf("  ERA5 year-months needed: %d (%s to %s), restricted to >= %s",
+              length(era5_yms), min(era5_yms), max(era5_yms), ERA5_MIN_DATE))
+
+  grid_wgs84_pts <- st_transform(st_centroid(grid), 4326)
+  pt_xy <- st_coordinates(grid_wgs84_pts)   # [,1]=lon [,2]=lat, row order == grid$cell_id
+
+  wind_results <- list()
+  era5_hard_error <- NULL
+
+  for (ym in era5_yms) {
+    yr  <- as.integer(substr(ym, 1, 4))
+    mth <- as.integer(substr(ym, 6, 7))
+    ckpt_file <- file.path(era5_ckpt_dir, sprintf("era5_wind_%s.parquet", ym))
+
+    if (file.exists(ckpt_file)) {
+      wind_results[[ym]] <- as.data.table(read_parquet(ckpt_file))
+      next
+    }
+
+    first_of_month <- as.Date(sprintf("%d-%02d-01", yr, mth))
+    first_of_next   <- if (mth == 12) as.Date(sprintf("%d-01-01", yr + 1L))
+                        else as.Date(sprintf("%d-%02d-01", yr, mth + 1L))
+    days_in_month  <- as.integer(first_of_next - first_of_month)
+
+    msg(sprintf("  ERA5 %s: requesting daily-mean u10/v10 (server-side bbox) ...", ym))
+
+    nc_target <- sprintf("era5_wind_%s.nc", ym)
+    req <- list(
+      dataset_short_name = "derived-era5-single-levels-daily-statistics",
+      product_type    = "reanalysis",
+      variable        = c("10m_u_component_of_wind", "10m_v_component_of_wind"),
+      year            = as.character(yr),
+      month           = sprintf("%02d", mth),
+      day             = sprintf("%02d", 1:days_in_month),
+      daily_statistic = "daily_mean",
+      time_zone       = "utc+00:00",
+      frequency       = "6_hourly",
+      area            = c(31, -87, 24, -81),   # N, W, S, E
+      target          = nc_target
+    )
+
+    # NOTE(paper): transient server errors (e.g. a 502 from CDS's nginx front end,
+    #              observed 2026-07-12 after 24 clean months) are retried with backoff
+    #              rather than treated as a hard stop — this is a resume-retry on a flaky
+    #              public API, not a silent placeholder fallback on an auth/licence failure
+    #              (those still stop() immediately, unchanged, per the lead directive).
+    dl_path <- NULL
+    for (attempt in 1:3) {
+      dl_path <- tryCatch({
+        wf_request(request = req, transfer = TRUE, path = raw_weather,
+                   time_out = 1800, verbose = FALSE)
+      }, error = function(e) {
+        era5_hard_error <<- conditionMessage(e)
+        NULL
+      })
+      if (!is.null(dl_path)) break
+      if (attempt < 3) {
+        msg(sprintf("  ERA5 %s attempt %d/3 failed (%s), retrying in %ds ...",
+                    ym, attempt, substr(era5_hard_error, 1, 80), attempt * 15))
+        Sys.sleep(attempt * 15)
+      }
+    }
+
+    if (is.null(dl_path)) {
+      msg(sprintf("  ERA5 %s FAILED after 3 attempts: %s", ym, era5_hard_error))
+      break   # stop pulling further months on first hard failure
+    }
+
+    # NOTE(paper): CDS returns a .zip containing ONE NetCDF per variable (confirmed
+    #              empirically via a live test call — the daily-statistics dataset does
+    #              NOT bundle u/v into one multi-band file). Filenames are not fixed
+    #              (e.g. "..._stream-oper_daily-mean.nc" vs "..._0_daily-mean.nc") so
+    #              files are matched by the variable-name substring, not a fixed pattern.
+    extract_dir <- file.path(era5_ckpt_dir, sprintf(".unzip_%s", ym))
+    dir.create(extract_dir, recursive = TRUE, showWarnings = FALSE)
+    unzip(dl_path, exdir = extract_dir, overwrite = TRUE)
+    nc_files <- list.files(extract_dir, pattern = "\\.nc$", full.names = TRUE)
+
+    u_file <- nc_files[grepl("u_component_of_wind", nc_files, ignore.case = TRUE)]
+    v_file <- nc_files[grepl("v_component_of_wind", nc_files, ignore.case = TRUE)]
+
+    if (length(u_file) != 1 || length(v_file) != 1) {
+      stop(sprintf(
+        "ERA5 %s: expected exactly one u-file and one v-file in the CDS zip, found %d/%d (files: %s).",
+        ym, length(u_file), length(v_file), paste(basename(nc_files), collapse = ", ")))
+    }
+
+    r_u <- rast(u_file[1])
+    r_v <- rast(v_file[1])
+    times_u <- tryCatch(as.Date(time(r_u)), error = function(e) NA)
+    times_v <- tryCatch(as.Date(time(r_v)), error = function(e) NA)
+
+    if (nlyr(r_u) != nlyr(r_v) || anyNA(times_u) || anyNA(times_v) ||
+        !identical(times_u, times_v)) {
+      stop(sprintf(
+        "ERA5 %s: u/v layer count or dates don't line up (nlyr u=%d v=%d; dates match=%s).",
+        ym, nlyr(r_u), nlyr(r_v), identical(times_u, times_v)))
+    }
+
+    # NOTE(paper): terra::extract() with a bare coordinate matrix (as opposed to a
+    #              SpatVector) does NOT prepend an ID column in this terra version
+    #              (1.9.34) — verified empirically (ncol == nlyr exactly; the matrix-input
+    #              extract method doesn't even accept an ID= argument). Asserted below
+    #              rather than assumed, so a future terra version change fails loudly
+    #              instead of silently misaligning day 1's data (this bug was caught by
+    #              a live test before the full pull ran).
+    u_vals <- terra::extract(r_u, pt_xy, method = "bilinear")
+    v_vals <- terra::extract(r_v, pt_xy, method = "bilinear")
+    stopifnot(ncol(u_vals) == nlyr(r_u), ncol(v_vals) == nlyr(r_v))
+
+    u_dt <- as.data.table(u_vals)
+    u_dt[, cell_id := grid$cell_id]
+    u_dt <- melt(u_dt, id.vars = "cell_id", variable.name = "layer", value.name = "wind_u_ms")
+    u_dt[, date := rep(times_u, each = nrow(grid))]
+
+    v_dt <- as.data.table(v_vals)
+    v_dt[, cell_id := grid$cell_id]
+    v_dt <- melt(v_dt, id.vars = "cell_id", variable.name = "layer", value.name = "wind_v_ms")
+    v_dt[, date := rep(times_v, each = nrow(grid))]
+
+    month_dt <- merge(u_dt[, .(cell_id, date, wind_u_ms)],
+                       v_dt[, .(cell_id, date, wind_v_ms)],
+                       by = c("cell_id", "date"))
+
+    # NOTE(cite): meteorological wind direction = direction wind blows FROM,
+    #             atan2(-u, -v) in compass bearing (0=N, 90=E), standard convention.
+    month_dt[, `:=`(
+      wind_speed_ms       = sqrt(wind_u_ms^2 + wind_v_ms^2),
+      wind_dir_deg        = (atan2(-wind_u_ms, -wind_v_ms) * 180 / pi) %% 360,
+      wind_along_ms       = wind_u_ms * cos(shore_theta) + wind_v_ms * sin(shore_theta),
+      wind_cross_ms       = -wind_u_ms * sin(shore_theta) + wind_v_ms * cos(shore_theta),
+      wind_is_placeholder = FALSE
+    )]
+
+    write_parquet(month_dt, ckpt_file)
+    wind_results[[ym]] <- month_dt
+    msg(sprintf("  ERA5 %s done. Rows: %d", ym, nrow(month_dt)))
+
+    rm(r_u, r_v); gc(FALSE)
+    unlink(dl_path)                          # discard the downloaded zip
+    unlink(extract_dir, recursive = TRUE)    # discard extracted netCDFs
+  }
+
+  if (!is.null(era5_hard_error)) {
+    stop(sprintf(
+      "ERA5 pull failed — reporting exact error per lead directive (no silent placeholder fallback): %s",
+      era5_hard_error))
+  }
+
+  wind_all <- rbindlist(wind_results, use.names = TRUE)
+  wind_dt  <- merge(cell_dates, wind_all, by = c("cell_id", "date"), all.x = TRUE)
+  wind_dt[is.na(wind_is_placeholder), wind_is_placeholder := TRUE]
+  era5_ok <- TRUE
+  msg(sprintf("  ERA5 wind REAL rows: %d / %d",
+              sum(!wind_dt$wind_is_placeholder), nrow(wind_dt)))
+
 } else {
   msg("  ~/.cdsapirc missing — ERA5 placeholder produced.")
 }
 
-# Always produce placeholder for wind (ERA5 not yet pulled)
-wind_dt <- cell_dates[, .(
-  cell_id              = cell_id,
-  date                 = date,
-  wind_u_ms            = NA_real_,
-  wind_v_ms            = NA_real_,
-  wind_speed_ms        = NA_real_,
-  wind_dir_deg         = NA_real_,
-  wind_is_placeholder  = TRUE
-)]
-
-# NOTE(paper): Along-shore and cross-shore components will be derived from u/v components
-#              once ERA5 is available. The West Florida Shelf shoreline runs ~NNW–SSE;
-#              cross-shore = perpendicular to that, driving onshore/offshore bloom transport.
-
-msg(sprintf("  Wind placeholder rows: %d (IS_PLACEHOLDER=TRUE)", nrow(wind_dt)))
+if (!era5_ok || is.null(wind_dt)) {
+  wind_dt <- cell_dates[, .(
+    cell_id              = cell_id,
+    date                 = date,
+    wind_u_ms            = NA_real_,
+    wind_v_ms            = NA_real_,
+    wind_speed_ms        = NA_real_,
+    wind_dir_deg         = NA_real_,
+    wind_along_ms        = NA_real_,
+    wind_cross_ms        = NA_real_,
+    wind_is_placeholder  = TRUE
+  )]
+  msg(sprintf("  Wind placeholder rows: %d (IS_PLACEHOLDER=TRUE)", nrow(wind_dt)))
+}
 
 # ── 7. SECTION F: SMAP Salinity (dynamic, Earthdata netrc, ~40–70 km) ─────────
 # NOTE(cite): Meissner et al. (2018) Remote Sensing Systems SMAP SSS V5.0.
@@ -562,7 +774,8 @@ env[, IS_PLACEHOLDER := wind_is_placeholder & precip_is_placeholder & salinity_i
 
 # Column order
 setcolorder(env, c("cell_id", "date",
-                   "wind_u_ms", "wind_v_ms", "wind_speed_ms", "wind_dir_deg", "wind_is_placeholder",
+                   "wind_u_ms", "wind_v_ms", "wind_speed_ms", "wind_dir_deg",
+                   "wind_along_ms", "wind_cross_ms", "wind_is_placeholder",
                    "precip_mm", "precip_is_placeholder",
                    "salinity_pss", "salinity_is_placeholder", "salinity_coarse_flag",
                    "month", "doy", "doy_sin", "doy_cos",
@@ -632,6 +845,28 @@ msg(sprintf("  Written: %s", out_static))
 msg("=== Writing manual_downloads.md ===")
 
 weather_md <- proj_path("data/raw/weather/manual_downloads.md")
+era5_status_lines <- if (era5_ok) {
+  c("**Status:** REAL — pulled via Copernicus CDS `derived-era5-single-levels-daily-statistics`",
+    sprintf("(bilinear-extracted to %d cells x %d dates; see reports/agent_logs/env-features.md)",
+            uniqueN(wind_dt$cell_id), uniqueN(wind_dt$date)))
+} else if (!file.exists(cds_file)) {
+  c("**Status:** PLACEHOLDER (no ~/.cdsapirc found on this machine)")
+} else {
+  c("**Status:** PLACEHOLDER",
+    "(credential present but the pull failed — see error captured in reports/agent_logs/env-features.md;",
+    "most recent cause: CDS 403 'required licences not accepted' — visit",
+    "https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels?tab=download#manage-licences",
+    "AND https://cds.climate.copernicus.eu/datasets/derived-era5-single-levels-daily-statistics?tab=download#manage-licences",
+    "to accept both dataset licences, then re-run this script.)")
+}
+chirps_status_lines <- if (chirps_ok) {
+  c(sprintf("**Status:** REAL — %d/%d rows pulled via vsicurl/vsigzip streaming", n_ok, n_ok + n_fail))
+} else {
+  c("**Status:** PLACEHOLDER (HTTP 403 CrowdSec ban re-triggered by the automated pull loop —",
+    "confirmed via response body containing 'CrowdSec Ban'; a single lightweight HEAD-request",
+    "liveness check can return 200 while the sustained GET loop still gets banned within seconds.",
+    "Per lead directive this is logged and NOT retried further this run.)")
+}
 writeLines(c(
   "# Weather / Environmental — Manual Download Instructions",
   "",
@@ -645,31 +880,27 @@ writeLines(c(
   "",
   "## ERA5 10m Wind (u/v components) — Copernicus CDS API",
   "",
-  "**Status:** PLACEHOLDER (no ~/.cdsapirc found on this machine)",
+  era5_status_lines,
   "**Cite:** Hersbach et al. (2020) doi:10.1002/qj.3803",
-  "**Coverage:** 1979-01-01 to present, ~0.25° (~28 km), daily",
+  "**Coverage:** 1979-01-01 to present, ~0.25° (~28 km), daily-mean via CDS server-side aggregation",
   "",
-  "### Steps to pull:",
+  "### Steps to pull (already implemented in R/05_environmental_features.R Section E):",
   "1. Register at https://cds.climate.copernicus.eu/ (free account)",
-  "2. Accept Terms of Use for ERA5 datasets",
-  "3. Copy your API key to `~/.cdsapirc`:",
+  "2. Accept the licence for BOTH datasets used (each CDS catalog entry has its own licence gate):",
+  "   - https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels?tab=download#manage-licences",
+  "   - https://cds.climate.copernicus.eu/datasets/derived-era5-single-levels-daily-statistics?tab=download#manage-licences",
+  "3. Copy your Personal Access Token to `~/.cdsapirc`:",
   "   ```",
   "   url: https://cds.climate.copernicus.eu/api",
-  "   key: <your-key>",
+  "   key: <your-PAT>",
   "   ```",
-  "4. Install the Python cdsapi client: `pip install cdsapi`",
-  "5. Run the pull script (to be implemented in R/05_environmental_features.R Section E):",
-  "   - Variable: 10m_u_component_of_wind, 10m_v_component_of_wind",
-  "   - Product type: reanalysis",
-  "   - Format: netCDF",
-  "   - Area: [31, -87, 24, -81]  (N, W, S, E — server-side Gulf bbox, do NOT download globally)",
-  "   - Date range: 1979-01-01 to 2021-12-31",
-  "   - Target: data/raw/weather/era5_wind_gulf.nc",
-  "6. Re-run R/05_environmental_features.R; it detects the file and populates wind columns.",
+  "4. R package `ecmwfr` handles auth + the async job/poll/download flow (installed via renv).",
+  "5. Re-run R/05_environmental_features.R; Section E pulls per-year daily-mean u10/v10,",
+  "   bilinearly extracts to cell centroids, and derives speed/direction/along-cross-shore.",
   "",
   "### Note on along-shore / cross-shore components:",
   "West Florida Shelf shoreline orientation ≈ 350° (NNW). Along-shore wind ≈ component parallel",
-  "to coast; cross-shore ≈ perpendicular. Derive after ERA5 pull:",
+  "to coast; cross-shore ≈ perpendicular. Derived as:",
   "  along  = u * cos(shore_angle) + v * sin(shore_angle)",
   "  cross  = -u * sin(shore_angle) + v * cos(shore_angle)",
   "",
@@ -677,7 +908,7 @@ writeLines(c(
   "",
   "## CHIRPS v2.0 Daily Precipitation — UCSB CHC",
   "",
-  "**Status:** PLACEHOLDER (HTTP 403 CrowdSec block during automated pull 2026-07-11)",
+  chirps_status_lines,
   "**Cite:** Funk et al. (2015) doi:10.1038/sdata.2015.66",
   "**Coverage:** 1981-01-01 to 2021-12-31 (for HABSOS overlap), ~0.05° (~5 km), daily",
   "",
@@ -689,8 +920,10 @@ writeLines(c(
   "   b. r <- rast(url); r_crop <- crop(r, ext(-87,-81,24,31))",
   "   c. vals <- extract(r_crop, grid_vect, fun=mean, na.rm=TRUE)",
   "   d. Append to checkpoint parquet; no raw tif saved to disk.",
-  "4. Wait 24h after a CrowdSec block before retrying (or use a different IP).",
-  "5. Re-run R/05_environmental_features.R — it resumes from the checkpoint.",
+  "4. Wait well over 24h after a CrowdSec ban before retrying, ideally from a different egress IP —",
+  "   a lightweight HEAD-request liveness check passing does NOT mean the ban has lifted for GETs.",
+  "5. Re-run R/05_environmental_features.R — it resumes from the checkpoint",
+  "   (checkpoint only records genuinely-successful rows, so failed dates are retried automatically).",
   "",
   "---",
   "",

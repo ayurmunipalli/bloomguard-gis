@@ -221,3 +221,50 @@ loses no valid rows.
 
 No re-run of modeling is required. The feature exclusions are clean and complete. The split
 construction code is structurally sound.
+
+---
+
+## Addendum (2026-07-13, R-SPLIT) — Re-verification after ERA5 wind added
+
+**Trigger:** Real ERA5 wind features (`wind_u_ms`, `wind_v_ms`, `wind_speed_ms`, `wind_dir_deg`,
+`wind_along_ms`, `wind_cross_ms`) replaced the all-NA placeholders, and Stage-1 RF was retrained.
+Split-construction code was reported unchanged; scope here is to confirm that.
+
+### Verdict: **PASS — split construction unaffected, prior caveats still apply**
+
+1. **Diff-check.** `git diff -- R/07_modeling.R` against the last commit shows only comment/NOTE
+   changes plus the `ALWAYS_EXCLUDE` feature list. `TRAIN_FRAC <- 0.80` (L87),
+   `TEMPORAL_CUTOFF_YEAR <- 2016L` (L88), the random stratified split (`set.seed(SEED + H)`,
+   `sample(pos_idx, ...)`/`sample(neg_idx, ...)`, L348-352), the temporal boundary
+   (`year < / >= TEMPORAL_CUTOFF_YEAR`, L357-358), and `merge_tiny_blocks()` (L253) are
+   byte-identical to what the 2026-07-11 review analyzed. No split-logic lines touched.
+
+2. **Row counts (independent read via python3/pyarrow of `data/processed/model_dataset.parquet`,
+   65,939 × 116 rows/cols — Rscript avoided per known sandbox hang risk):**
+
+   | H | rows (this run) | rows (2026-07-11) | match |
+   |---|---|---|---|
+   | 1 | 7,791 | 7,791 | Y |
+   | 3 | 4,765 | 4,765 | Y |
+   | 5 | 6,151 | 6,151 | Y |
+   | 7 | 23,751 | 23,751 | Y |
+   | 14 | 23,889 | 23,889 | Y |
+
+   Identical to the byte. Since split assignment depends only on `cell_id`/`date_T`/`year`/
+   `spatial_block_tiger` — none of which changed — row membership per fold (random/temporal/
+   spatial) is unchanged. The Sarasota-County (12_115) holdout and the H=14 ~49-row embargo
+   bleed are therefore unchanged in substance; both caveats from the 2026-07-11 review
+   (prevalence confound, zero-embargo boundary bleed) still apply and must still be cited
+   wherever the retrained numbers are reported.
+
+3. **Feature-exclusion check (new, this run).** Confirmed in code and data:
+   `wind_u_ms/wind_v_ms/wind_speed_ms/wind_dir_deg/wind_along_ms/wind_cross_ms` are **not** in
+   `ALWAYS_EXCLUDE` (L106-129) and are 100% non-null in the parquet (65,939/65,939 each) — they
+   are now live features, as intended. `precip_mm` and `salinity_pss` remain in
+   `ALWAYS_EXCLUDE` and remain 100% NA (0/65,939 non-null) — correctly still excluded
+   placeholders.
+
+**Conclusion:** Adding wind features did not alter split construction, row membership, or fold
+boundaries. No new leakage introduced. The two 2026-07-11 caveats (Sarasota prevalence
+confound on the spatial split; zero-embargo H=14 boundary bleed, ~49 rows/0.33%) remain in force
+and must accompany any reporting of the new wind-augmented model numbers.

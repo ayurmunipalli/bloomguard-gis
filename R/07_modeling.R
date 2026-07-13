@@ -91,10 +91,14 @@ LOG_FEATURES <- c("chlor_a_mean", "nflh_mean", "Kd_490_mean")  # heavy-tailed
 
 # NOTE(paper): temporal cutoff 2016 gives train 2003-2015 (13 yr) / test 2016-2021 (6 yr).
 #              Matches HABSOS intensive sampling after 2015 being held out.
-# NOTE(limitation): dynamic env features (ERA5 wind, CHIRPS precip, SMAP salinity)
-#                   are placeholder (all-NA) in this cube. Model uses satellite + static
-#                   geo + seasonality + historical HAB lags only. ERA5/CHIRPS/SMAP to
-#                   be added in the next data-pipeline iteration.
+# NOTE(paper): as of the 2026-07-12 re-run, ERA5 wind (speed/direction/along-cross-shore)
+#              is REAL (Copernicus CDS, 2003-2021) and included as a live feature set —
+#              this is the isolated change from the prior run (satellite + static geo +
+#              seasonality + historical HAB lags only, no meteorology).
+# NOTE(limitation): CHIRPS precip and SMAP salinity remain placeholder (all-NA) —
+#                   CHIRPS blocked by a CrowdSec IP ban re-triggered during this same
+#                   session; SMAP deferred per lead directive (lowest-value, coarsest
+#                   of the three env sources). Both still excluded from features below.
 
 # ── FEATURE EXCLUSION LIST (from R6 review — consolidated) ─────────────────
 # NOTE(paper): same-day HAB column HARD-DROPPED by name to prevent
@@ -117,8 +121,10 @@ ALWAYS_EXCLUDE <- c(
   "sat_IS_PLACEHOLDER", "env_IS_PLACEHOLDER",
   "static_IS_PLACEHOLDER", "label_IS_PLACEHOLDER",
   "sat_feature_filled", "env_feature_filled",
-  # All-NA placeholder env columns (ERA5/CHIRPS/SMAP not yet pulled)
-  "wind_u_ms", "wind_v_ms", "wind_speed_ms", "wind_dir_deg",
+  # Remaining all-NA placeholder env columns (CHIRPS/SMAP still not pulled as of this
+  # run — see reports/agent_logs/env-features.md 2026-07-12 update). ERA5 wind
+  # (wind_u_ms/wind_v_ms/wind_speed_ms/wind_dir_deg/wind_along_ms/wind_cross_ms) is
+  # REAL as of this run and deliberately NOT excluded — it is now a live feature set.
   "precip_mm", "salinity_pss"
 )
 
@@ -213,6 +219,27 @@ pr_auc_fn <- function(prob, actual) {
       na.rm = TRUE)
 }
 
+# NOTE(paper): precision-at-recall-0.80 — a threshold-free operating-point summary
+#              requested for the wind-feature comparison. Walks the PR curve (sorted by
+#              descending prob) and reports precision at the first point where recall
+#              reaches >= target_recall (i.e., the best-case precision achievable while
+#              still catching >=80% of true positives). NA if recall never reaches target
+#              (happens when n_pos is small and the top-K predictions can't reach 80% recall
+#              without passing through a NA-precision point — reported as NA, not 0, to avoid
+#              implying a real operating point exists when it doesn't).
+precision_at_recall_fn <- function(prob, actual, target_recall = 0.80) {
+  if (length(unique(actual)) < 2) return(NA_real_)
+  ord  <- order(prob, decreasing = TRUE)
+  act  <- actual[ord]
+  tp   <- cumsum(act)
+  fp   <- cumsum(1L - act)
+  prec <- tp / (tp + fp)
+  rec  <- tp / sum(act)
+  hit  <- which(rec >= target_recall)
+  if (length(hit) == 0) return(NA_real_)
+  round(prec[hit[1]], 4)
+}
+
 compute_metrics <- function(prob, actual, threshold = 0.5) {
   pred <- as.integer(prob >= threshold)
   tp   <- sum(pred == 1L & actual == 1L)
@@ -233,6 +260,7 @@ compute_metrics <- function(prob, actual, threshold = 0.5) {
     fnr       = round(fnr,  4),
     roc_auc   = round(roc_auc_fn(prob, actual), 4),
     pr_auc    = round(pr_auc_fn(prob, actual),  4),
+    prec_at_recall80 = precision_at_recall_fn(prob, actual, 0.80),
     n_test    = length(actual),
     n_pos     = sum(actual),
     tp = tp, fp = fp, fn = fn, tn = tn
@@ -634,9 +662,10 @@ log_text <- paste0(
   "---\n\n",
   "## Decisions\n\n",
   "- **Feature exclusion**: hard-dropped `HAB` (same-day detection label, col 3) by name ",
-  "per R6 warning #3 — prevents detection-conflation leakage. Also excluded 6 all-NA ",
-  "placeholder env cols (wind_u/v/speed/dir, precip_mm, salinity_pss), all diagnostic/meta ",
-  "flags, and spatial_block_tiger (CV key, not predictor). — 2026-07-11\n",
+  "per R6 warning #3 — prevents detection-conflation leakage. ERA5 wind (speed/dir/u/v/",
+  "along-cross-shore) is REAL as of 2026-07-13 and included as a feature; CHIRPS precip ",
+  "and SMAP salinity remain all-NA placeholder and stay excluded, along with all ",
+  "diagnostic/meta flags and spatial_block_tiger (CV key, not predictor). — 2026-07-13\n",
   "- **Imputation**: median impute on train-derived medians + binary `{col}_is_missing` ",
   "indicator per NA column. Avoids silent fabrication; missingness pattern (cloud cover) ",
   "is itself informative to RF. — 2026-07-11\n",
@@ -687,10 +716,16 @@ log_text <- paste0(
   "- **Spatial-block split** — county-block holdout per lead directive 2026-07-11 ",
   "(decisions.md). Tiny blocks merged before CV. PLAN.md §9.\n\n",
   "## Open questions / caveats / limitations\n\n",
-  "- NOTE(limitation): Dynamic env features (ERA5 wind, CHIRPS precip, SMAP salinity) ",
-  "are all-NA placeholder in this cube. Model trained on satellite + static geo + ",
-  "seasonality + historical HAB lags only. Adding ERA5/CHIRPS/SMAP is expected to ",
-  "improve recall at short horizons where meteorological forcing dominates.\n",
+  "- NOTE(limitation): CHIRPS precip and SMAP salinity remain all-NA placeholder in this ",
+  "cube (CHIRPS blocked by a CrowdSec IP ban, SMAP deferred per lead directive). ERA5 ",
+  "wind is REAL as of 2026-07-13.\n",
+  "- NOTE(paper): Wind-effect finding (isolated before/after comparison, identical seed/",
+  "splits/rows, only feature set differs) — the prior expectation that meteorological ",
+  "features would most improve SHORT-horizon recall is not clearly borne out. Recall at ",
+  "the default 0.50 threshold slightly decreased at H=1/H=5 on both temporal and spatial ",
+  "splits; H=3 improved (notably +0.032 recall on spatial). PR-AUC improved modestly at ",
+  "8/10 horizon-split combinations, with gains if anything larger at LONGER horizons ",
+  "(H=7, H=14) than short ones. See outputs/tables/model_results.csv for full numbers.\n",
   "- NOTE(limitation): RF trained with num.threads=1 due to host resource constraint. ",
   "Production re-run should use num.threads=parallel::detectCores()-1.\n",
   "- NOTE(limitation): Short-horizon datasets (H=1: 7,791 rows; H=3: 4,765) are sparse ",

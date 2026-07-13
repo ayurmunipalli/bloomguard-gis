@@ -264,3 +264,54 @@ is not a useful training filter in this state.
    `cloud_flag`, `salinity_coarse_flag`, `feature_filled_any`, `IS_ABSENCE_UNCERTAIN`,
    `sat_IS_PLACEHOLDER`, `env_IS_PLACEHOLDER`, `static_IS_PLACEHOLDER`, `label_IS_PLACEHOLDER`
 4. Spatial CV grouping key (not a feature): `spatial_block_tiger`
+
+---
+
+## Addendum — ERA5 wind join re-verify (2026-07-13)
+
+**Trigger:** Real ERA5 10m wind (u/v, speed, direction, along/cross-shore) pulled via
+Copernicus CDS and joined into the cube, replacing the all-NA placeholder from the prior
+review. Trend-feature joins, T+H label shift, and HAB-lag joins are unchanged code — not
+re-verified here (trust prior PASS). Scope: the wind change only, plus a row/label sanity
+check that nothing else silently moved.
+
+**Overall: PASS.**
+
+1. **ERA5 request config — PASS.** `R/05_environmental_features.R` line ~542-543:
+   `daily_statistic = "daily_mean"`, `time_zone = "utc+00:00"`. Per-value date comes straight
+   from the NetCDF's own time axis (`times_u <- as.Date(time(r_u))`, line 597) with no offset
+   arithmetic anywhere in the pull/reshape code (`grep`'d for `date_T`, `+ 1`, `shift(`,
+   `lead(`, `lag(` in the full diff vs. the last commit — zero matches). No forward window.
+
+2. **Join is exact-date — PASS.** `R/06_build_datacube.R` line 344-347:
+   `merge(base, env_join, by.x = c("cell_id","sample_date"), by.y = c("cell_id","date"), all.x = TRUE)`
+   — same-day match, both sides mean day T. This merge is unchanged code (diff on this file
+   vs. last commit is comment-only, 11 lines, no logic touched).
+
+3. **Wind features are same-day levels only — PASS.** Lines 634-640: `wind_speed_ms` (sqrt of
+   u²+v²), `wind_dir_deg` (atan2, meteorological convention), `wind_along_ms`/`wind_cross_ms`
+   (static rotation by fixed `SHORE_ANGLE_DEG = 350`) — all computed from the *same* month_dt
+   row's u/v, no temporal transform. Confirmed no `wind_*_delta`/`_slope`/`_pct_chg`/`_roll`
+   columns exist anywhere in the codebase (grep, zero matches) — no D11 trend features were
+   built for wind, as expected.
+
+4. **Data-level check (pyarrow, independent of R pipeline) — PASS.**
+   - Total rows: 65,939 (matches pre-wind-update exactly)
+   - `wind_speed_ms` non-NA: 65,939 / 65,939 (100% — ERA5 2003-2021 fully covers the
+     satellite-era-filtered cube)
+   - H1: 957 pos / 7,791 labelled; H3: 686/4,765; H5: 809/6,151; H7: 2,005/23,751;
+     H14: 1,881/23,889 — **all identical** to the pre-wind numbers. Row/label membership did
+     not change; only feature columns did. (Cross-checked against the live `a6_run1.log`
+     build output, which reports the same five horizon counts independently.)
+
+5. **No future-date use near wind pull/join — PASS.** No `date_T + 1`-style arithmetic found
+   in the ERA5 section or the env join; daily-mean is a same-UTC-day aggregate and the join is
+   exact-date, so no mechanism exists for day-T wind to include day-(T+1) information.
+
+**No leakage introduced by the ERA5 wind update. Cube cleared for A7 retrain.**
+
+Note (out of scope for this check, flagged for A7): the exclusion list above still lists
+`wind_u_ms`/`wind_v_ms`/`wind_speed_ms`/`wind_dir_deg` as "all NA" from the prior review —
+that is now stale for wind specifically (100% real per check 4). A7 should re-derive its
+exclusion list from current `*_is_placeholder`/`*_IS_PLACEHOLDER` flags rather than reusing
+the old list verbatim.
