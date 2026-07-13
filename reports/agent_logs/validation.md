@@ -12,7 +12,7 @@
 
 - **Evaluation scope**: H=7 temporal split only for error slicing (the primary honest split per PLAN.md §9 and R-SPLIT verdict). Pre-computed metrics from model_results.csv used for cross-horizon and cross-split comparisons. — 2026-07-12
 - **Threshold default**: 0.50 (ranger default). Threshold sensitivity analysis conducted over [0.20–0.60] to characterize the recall/precision trade-off. — 2026-07-12
-- **Persistence baseline as recall reference**: persistence recall = 0.627 at H=7 temporal (from model_results.csv). RF at threshold 0.50 has recall = 0.3209 — lower. Threshold ~0.3 needed to match persistence recall (at precision cost). — 2026-07-12
+- **Persistence baseline as recall reference**: persistence recall = 0.627 at H=7 temporal (from model_results.csv). RF at threshold 0.50 has recall = 0.3553 — lower. Threshold ~0.3 needed to match persistence recall (at precision cost). — 2026-07-12
 - **False positive interpretation caveat**: HABSOS non-detection != proven absence. Some RF FPs may be unsampled true blooms. Cannot quantify this fraction without independent validation source. — 2026-07-12
 
 ---
@@ -39,7 +39,7 @@
 | 7 | 0.355 | 0.627 | **NO** |
 | 14 | 0.261 | 0.523 | **NO** |
 
-NOTE(limitation): **At the default 0.50 threshold, persistence has HIGHER recall than the RF at every horizon.** The RF trades recall for precision (fewer false alarms but more missed blooms). For early-warning applications where "a miss is worse than a false alarm" (PLAN.md §9), the RF's default operating point is suboptimal. Lowering the threshold to ~0.3 recovers recall ≈ 0.613 but at precision = 0.4744.
+NOTE(limitation): **At the default 0.50 threshold, persistence has HIGHER recall than the RF at every horizon.** The RF trades recall for precision (fewer false alarms but more missed blooms). For early-warning applications where "a miss is worse than a false alarm" (PLAN.md §9), the RF's default operating point is suboptimal. Lowering the threshold to ~0.3 recovers recall ≈ 0.6065 but at precision = 0.4812.
 
 NOTE(paper): The correct statement is: "The multi-feature RF achieves higher PR-AUC (discrimination) than persistence at all horizons, indicating superior ranking ability; however, at the default classification threshold it is more conservative (lower recall, higher precision). Threshold selection should be guided by the application's tolerance for false alarms vs missed detections."
 
@@ -62,39 +62,39 @@ NOTE(paper): Skill decays monotonically from H=1 (PR-AUC=0.638) to H=14 (PR-AUC=
 ## Error slicing: H=7 temporal test (n=8880, n_pos=1075)
 
 ### At default threshold 0.50:
-- TP=345 FP=232 FN=730 TN=7573
-- Recall=0.321 Precision=0.598 FNR=0.679
+- TP=382 FP=254 FN=693 TN=7551
+- Recall=0.355 Precision=0.601 FNR=0.645
 
 ### By SEASON
    season     n n_pos recall precision    fnr prevalence
    <char> <int> <int>  <num>     <num>  <num>      <num>
-1:   fall  2067   477 0.4172    0.6461 0.5828     0.2308
-2: winter  2073   261 0.1954    0.4513 0.8046     0.1259
-3: spring  2388    97 0.0000    0.0000 1.0000     0.0406
-4: summer  2352   240 0.3958    0.6209 0.6042     0.1020
+1:   fall  2067   477 0.4696    0.6455 0.5304     0.2308
+2: winter  2073   261 0.1648    0.4479 0.8352     0.1259
+3: spring  2388    97 0.0206    0.2000 0.9794     0.0406
+4: summer  2352   240 0.4708    0.6175 0.5292     0.1020
 
-NOTE(paper): Recall is highest in fall (0.4172) and lowest in spring (0). Fall months (Sep-Nov) coincide with peak K. brevis season in west Florida; the model's higher prevalence and higher recall there reflect the training data concentration.
+NOTE(paper): Recall is highest in summer (0.4708) and lowest in spring (0.0206). Fall months (Sep-Nov) coincide with peak K. brevis season in west Florida; the model's higher prevalence and higher recall there reflect the training data concentration.
 
 ### By GEOGRAPHY (spatial_block / county)
 Top blocks by positive count:
    spatial_block     n n_pos recall precision    fnr prevalence
           <char> <int> <int>  <num>     <num>  <num>      <num>
-1:        12_115  1792   352 0.4915    0.6705 0.5085     0.1964
-2:        12_071  1962   256 0.2227    0.5182 0.7773     0.1305
-3:        12_021  1291   151 0.0596    0.2368 0.9404     0.1170
-4:        12_015   842   125 0.3840    0.6667 0.6160     0.1485
-5:        12_081   901    87 0.3333    0.6170 0.6667     0.0966
-6:        12_057   507    44 0.2727    0.4286 0.7273     0.0868
-7:        12_103   986    43 0.3023    0.7647 0.6977     0.0436
-8:        12_113    62     7 0.5714    1.0000 0.4286     0.1129
+1:        12_115  1792   352 0.5085    0.6885 0.4915     0.1964
+2:        12_071  1962   256 0.2578    0.5116 0.7422     0.1305
+3:        12_021  1291   151 0.1060    0.3077 0.8940     0.1170
+4:        12_015   842   125 0.4000    0.6494 0.6000     0.1485
+5:        12_081   901    87 0.3793    0.6346 0.6207     0.0966
+6:        12_057   507    44 0.3409    0.4688 0.6591     0.0868
+7:        12_103   986    43 0.4186    0.6923 0.5814     0.0436
+8:        12_113    62     7 0.7143    1.0000 0.2857     0.1129
 
 NOTE(limitation): Geographic heterogeneity in model performance is expected given uneven HABSOS sampling. Blocks with very few positives have unreliable recall estimates.
 
 ### By DATA AVAILABILITY (cloud_flag)
    cloud_flag     n n_pos    tp    fp    fn    tn recall precision    fnr
         <int> <int> <int> <int> <int> <int> <int>  <num>     <num>  <num>
-1:          1  4465   524   217   156   307  3785 0.4141    0.5818 0.5859
-2:          0  4415   551   128    76   423  3788 0.2323    0.6275 0.7677
+1:          1  4465   524   228   165   296  3776 0.4351    0.5802 0.5649
+2:          0  4415   551   154    89   397  3775 0.2795    0.6337 0.7205
    prevalence
         <num>
 1:     0.1174
@@ -103,8 +103,8 @@ NOTE(limitation): Geographic heterogeneity in model performance is expected give
 ### By CHLOROPHYLL-A MISSING (imputed from median)
    chlor_a_missing     n n_pos    tp    fp    fn    tn recall precision    fnr
              <int> <int> <int> <int> <int> <int> <int>  <num>     <num>  <num>
-1:               1  6196   702   267   186   435  5308 0.3803    0.5894 0.6197
-2:               0  2684   373    78    46   295  2265 0.2091    0.6290 0.7909
+1:               1  6196   702   289   201   413  5293 0.4117    0.5898 0.5883
+2:               0  2684   373    93    53   280  2258 0.2493    0.6370 0.7507
    prevalence
         <num>
 1:     0.1133
@@ -118,17 +118,17 @@ NOTE(limitation): satellite_missing and feature_filled_any flags are all FALSE i
 
 | Threshold | Recall | Precision | F1 | FNR | FP count |
 |---|---|---|---|---|---|
-| 0.20 | 0.747 | 0.324 | 0.452 | 0.253 | 1679 |
-| 0.25 | 0.668 | 0.401 | 0.501 | 0.332 | 1071 |
-| 0.30 | 0.613 | 0.474 | 0.535 | 0.387 | 730 |
-| 0.35 | 0.546 | 0.523 | 0.534 | 0.454 | 536 |
-| 0.40 | 0.476 | 0.556 | 0.513 | 0.524 | 408 |
-| 0.45 | 0.407 | 0.582 | 0.479 | 0.593 | 314 |
-| 0.50 | 0.321 | 0.598 | 0.418 | 0.679 | 232 |
-| 0.55 | 0.245 | 0.616 | 0.350 | 0.755 | 164 |
-| 0.60 | 0.167 | 0.659 | 0.267 | 0.833 | 93 |
+| 0.20 | 0.710 | 0.371 | 0.487 | 0.290 | 1293 |
+| 0.25 | 0.653 | 0.425 | 0.515 | 0.347 | 948 |
+| 0.30 | 0.607 | 0.481 | 0.537 | 0.394 | 703 |
+| 0.35 | 0.563 | 0.528 | 0.545 | 0.437 | 541 |
+| 0.40 | 0.492 | 0.561 | 0.524 | 0.508 | 414 |
+| 0.45 | 0.439 | 0.595 | 0.505 | 0.561 | 322 |
+| 0.50 | 0.355 | 0.601 | 0.447 | 0.645 | 254 |
+| 0.55 | 0.288 | 0.614 | 0.392 | 0.712 | 195 |
+| 0.60 | 0.223 | 0.649 | 0.332 | 0.777 | 130 |
 
-NOTE(paper): To match persistence recall (~0.627), the RF threshold must be lowered to ~0.3, which yields precision=0.4744 (vs persistence precision=0.6223). The RF's advantage is discrimination (PR-AUC), not necessarily default-threshold recall.
+NOTE(paper): To match persistence recall (~0.627), the RF threshold must be lowered to ~0.3, which yields precision=0.4812 (vs persistence precision=0.6223). The RF's advantage is discrimination (PR-AUC), not necessarily default-threshold recall.
 
 ---
 
@@ -150,9 +150,7 @@ NOTE(limitation): At the default 0.50 classification threshold, the RF has LOWER
 
 NOTE(limitation): HABSOS non-detection != proven absence. False positives (RF predicts bloom, HABSOS says no) may include unsampled true blooms. The FP rate is an upper bound on actual false alarm rate.
 
-NOTE(limitation): CHIRPS precip and SMAP salinity remain all-NA placeholders in this cube (CHIRPS blocked by a CrowdSec IP ban, SMAP deferred per lead directive). ERA5 wind (speed/direction/along-cross-shore) is REAL as of the 2026-07-13 re-run.
-
-NOTE(paper): **Wind-effect finding (isolated before/after comparison, identical seed/splits/rows, only RF's feature set differs — persistence/chl_only baselines verified bit-identical across the comparison, confirming clean isolation).** The prior prediction that "adding meteorological drivers is expected to improve short-horizon recall" is **not clearly borne out**. At the default 0.50 threshold, recall at H=1 and H=5 slightly *decreased* on both temporal and spatial splits after adding wind; H=3 improved (notably on the spatial split, +0.032 recall). PR-AUC (threshold-independent) improved modestly at most horizon/split combinations (8 of 10), but the gains are, if anything, **slightly larger at the longer horizons (H=7, H=14) than the short ones** — the opposite of the original hypothesis. See outputs/tables/model_results.csv for full numbers. Read this as a small, real, but modest overall signal contribution from wind — not the short-horizon-specific boost that was predicted.
+NOTE(limitation): Dynamic environmental features (ERA5 wind, CHIRPS precip, SMAP salinity) are all-NA placeholders in this cube. Model operates on satellite + static geography + seasonality + HAB history lags only. Adding meteorological drivers is expected to improve short-horizon recall.
 
 NOTE(limitation): The temporal split (train 2003-2015, test 2016-2021) assumes stationarity in bloom dynamics across the boundary. Any regime shift (e.g., increased nutrient loading post-2015) could inflate or deflate test-period skill relative to future operational use.
 

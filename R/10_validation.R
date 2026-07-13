@@ -110,7 +110,15 @@ ALWAYS_EXCLUDE <- c(
 )
 
 excl_H <- c(ALWAYS_EXCLUDE, setdiff(paste0("HAB_H", HORIZONS), TARGET_COL))
-feat_cols <- setdiff(names(h_dt), c(excl_H, TARGET_COL, "year", "month", "doy"))
+# NOTE(paper): SCORING RECONCILIATION (see reports/scoring_reconciliation.md) — this MUST
+#              exclude only "year" here, matching 07_modeling.R's feat_cols exactly.
+#              "month" and "doy" are REAL trained features (confirmed via
+#              best$rf$forest$independent.variable.names), not metadata. The previous
+#              version excluded them here, which caused them to be silently zero-filled
+#              by the "missing model vars" fallback below — corrupting every prediction
+#              and producing a confusion matrix that disagreed with 07_modeling.R's own
+#              self-reported metrics for the identical saved model.
+feat_cols <- setdiff(names(h_dt), c(excl_H, TARGET_COL, "year"))
 
 # Identify NA columns for imputation
 na_cols <- feat_cols[sapply(feat_cols, function(cn) anyNA(h_dt[[cn]]))]
