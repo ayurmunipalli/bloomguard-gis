@@ -180,3 +180,145 @@ NOTE(limitation): RF trained with num.threads=1 due to host resource constraint.
 | Limitations as NOTE(limitation) tags | PASS |
 | Decision log (§0.2) | PASS |
 
+
+---
+
+# Bio-optical feature validation — BEFORE vs AFTER (A10, 2026-07-14)
+
+**Question:** A7 added the bio-optical species-discrimination features (RBD/KBBI, Cannizzaro
+bbp-vs-Morel deficit — see `reports/bio_optical_spec.md`) and reported an honest NEGATIVE
+at threshold 0.5. This section (a) measures the isolated impact bit-exact, and (b) tests
+whether the features did their INTENDED job — cutting high-chlorophyll/nFLH false positives
+(the `fp_discrimination_diagnosis.md` mechanism) — even if aggregate metrics fell.
+
+**Method:** all H=7-temporal numbers computed bit-exact from the two frozen models'
+stored `prob_rf`/`act` (`best_model_before_bio.rds` MD5 42a974c0…, `best_model.rds`), same
+8880 test rows (`identical(test_idx)` = TRUE, n_pos=1075). Scoring functions verbatim from
+`R/07_modeling.R`. No retraining. Grid metrics read from `model_results{,_before_bio}.csv`.
+
+## A) Headline — H=7 temporal, BEFORE → AFTER (bit-exact)
+
+| Metric | BEFORE | AFTER | Δ |
+|---|---|---|---|
+| PR-AUC | 0.5022 | 0.4849 | **−0.0173** |
+| precision @ recall=0.80 | 0.2759 | 0.2796 | **+0.0037** |
+| ROC-AUC | 0.8352 | 0.8356 | +0.0004 |
+| recall @ 0.5 | 0.3553 | 0.3153 | **−0.0400** |
+| precision @ 0.5 | 0.6006 | 0.5937 | −0.0069 |
+| F1 @ 0.5 | 0.4465 | 0.4119 | −0.0346 |
+| TP / FP / FN / TN | 382/254/693/7551 | 339/232/736/7573 | TP −43, FP −22 |
+
+Sanity: BEFORE recall@0.5 reproduces A7's 0.3553 exactly. The AFTER model is **more
+conservative** — it fires positive less often, removing 22 FPs but losing 43 TPs → net
+recall/PR-AUC down; precision@recall-0.80 essentially flat (+0.0037).
+
+## B) Mechanistic FP-concentration test (the key question) — observed rows only
+
+Reproduces `fp_discrimination_diagnosis.md` quartile cut on the H=7-temporal test set,
+BEFORE vs AFTER. Quartiles: `type=7` on observed (non-imputed) values only.
+Missingness caveat: chl observed in 2684/8880 (30.2%), nFLH in 2236/8880 (25.2%); this
+characterizes FPs **on clear-sky retrieval days only.**
+
+**Chlorophyll-a FP by quartile (n_obs=2684):**
+| Quartile | FP before | FP after | FP-rate before | FP-rate after | share-of-all-FP before | after |
+|---|---|---|---|---|---|---|
+| Q1 | 4 | 4 | 0.64% | 0.64% | 7.55% | 8.89% |
+| Q2 | 2 | 2 | 0.33% | 0.33% | 3.77% | 4.44% |
+| Q3 | 8 | 8 | 1.43% | 1.43% | 15.09% | 17.78% |
+| **Q4** | **39** | **31** | **7.57%** | **6.02%** | **73.58%** | **68.89%** |
+
+→ **Every FP the features removed among observed-chl rows came from the top chl quartile**
+(Q1–Q3 counts unchanged 4/2/8; Q4 39→31). Top-chl-Q4 share of all FPs fell 73.58% → 68.89%.
+
+**nFLH FP by quartile (n_obs=2236):** Q1 2→0, Q2 3→1, Q3 16→15, Q4 22→20. Top-Q4 FP-rate
+5.31% → 4.83%; top-Q4 share 51.16% → 55.56% (share rose because low-nFLH FPs fell faster).
+
+**Joint top-quartile cross-tab (n both-observed=2236):**
+| chl-Q4 | nFLH-Q4 | FP-rate BEFORE | FP-rate AFTER |
+|---|---|---|---|
+| No | No | 0.65% | 0.49% |
+| No | Yes | 1.81% | 1.81% |
+| Yes | No | 4.42% | 3.40% |
+| **Yes** | **Yes** | **12.41%** | **10.95%** |
+
+Joint both-Q4 FP-rate fell 12.41% → 10.95% (−1.46pp; ~12% relative). BUT the clean-water
+(neither) cell fell proportionally MORE (0.65% → 0.49%), so the **concentration RATIO
+both-vs-neither ROSE 19.09× → 22.35×** — it did NOT drop.
+
+## Mechanistic verdict (plain)
+
+The features **are associated with a small, targeted reduction of high-chlorophyll false
+positives** — their design purpose. In observed-chl rows the entire net FP reduction (8
+fewer) came from the top chl quartile (39→31); top-chl-Q4's share of all FPs fell ~4.7pp;
+the joint high-chl/high-nFLH FP-rate fell ~1.5pp. **HOWEVER** the ~19× joint FP-concentration
+ratio did **not** drop — it rose to ~22×, because clean-water false positives fell even
+faster than the targeted ones. And the targeted FP cut is **outweighed by a larger TP loss**
+(−43 TP vs −22 FP), so net recall/PR-AUC fell. The effect is real but weak (single/double-digit
+FP counts), clear-sky-only, and does not achieve species discrimination in the aggregate.
+
+## C) Grid PR-AUC, BEFORE → AFTER (RF, all 15 H×split)
+
+PR-AUC **down in 10/15, up in 5/15.** recall@0.5 **down in 12/15** (matches A7's headline).
+Full grid in `outputs/tables/bio_validation_before_after.csv`. H=7 temporal −0.0173;
+largest drop H=5 temporal −0.0260; gains concentrated at H=1 (all splits) and H=3 temporal.
+
+## D) precision @ recall=0.80 grid — a WASH, not a clear negative
+
+From the `prec_at_recall80` column of both `model_results` CSVs (bit-exact-verified at H=7
+temporal against stored arrays). **Down 7/15, up 7/15, flat 1/15** — net neutral at the
+fixed-recall operating point, unlike the clear threshold-0.5 recall drop. Gains: H=3 temporal
++0.0467, H=5 random +0.0469, H=7 spatial +0.0202, H=7 temporal +0.0037. Losses concentrated
+at H=1 random −0.0412, H=3 random −0.0399, H=14 spatial −0.0206.
+
+**D-artifact note:** `outputs/tables/predictions_before_after.parquet` (A7) never arrived,
+so no independent per-row recomputation of alternative operating points was possible. The
+per-combo precision@recall-0.80 grid IS fully available from the stored CSV metrics above
+(and validated bit-exact at H=7 temporal), so D is answered at the operating-point level; a
+finer per-row / per-feature-set cut remains **pending that artifact** — not fabricated.
+
+## Limitations / facts for the author
+
+NOTE(limitation): Bio-optical discrimination features (RBD, KBBI, bbp_ratio_morel,
+bbp_deficit, Cannizzaro flag) produce a NET-NEGATIVE aggregate effect at H=7 temporal:
+PR-AUC 0.5022→0.4849 (−0.0173), recall@0.5 0.3553→0.3153 (−0.0400). Report this plainly.
+
+NOTE(limitation): The features DID cut targeted high-chlorophyll false positives (top-chl-Q4
+FP 39→31; top-chl-Q4 share of all FP 73.58%→68.89%; joint high-chl/high-nFLH FP-rate
+12.41%→10.95%) — their design purpose — but the cut is small and is outweighed by a larger
+true-positive loss (−43 TP vs −22 FP at threshold 0.5). Targeted-effect and aggregate-metric
+direction are BOTH first-class findings: the features shaved the right errors but cost more
+right answers.
+
+NOTE(limitation): The joint FP-concentration RATIO did NOT fall — it rose 19.09× → 22.35×,
+because clean-water (neither-quartile) false positives dropped proportionally more than the
+targeted high-chl/high-nFLH ones. The features did not de-concentrate FPs relative to clean
+water; they lowered the overall FP floor slightly.
+
+NOTE(limitation): The FP-concentration test uses observed (non-imputed) rows only — chl
+observed in 30.2% of the H=7 test set, nFLH in 25.2%. It characterizes false positives on
+clear-sky retrieval days; behavior on the ~70–75% cloud-imputed rows is not measured by this
+cut. Absolute FP changes are single/double-digit → the targeted effect is real but weak.
+
+NOTE(limitation): At the fixed recall=0.80 operating point the features are ~neutral across
+the grid (down 7 / up 7 / flat 1 of 15), materially milder than the threshold-0.5 recall
+drop — the negative is threshold-dependent, concentrated at the default 0.5 cut.
+
+NOTE(cite): "Associated with," not "causes." The FP reduction is a correlational
+error-shape change on a frozen holdout, not a demonstrated causal improvement in K. brevis
+discrimination.
+
+## Overall honest verdict
+
+Adding the bio-optical features **hurt aggregate skill** at H=7 temporal (PR-AUC −0.0173,
+recall −0.0400) and mildly hurt PR-AUC across most of the grid (10/15 down). They **did**
+produce their intended mechanistic effect — a small, correctly-targeted cut of
+high-chlorophyll false positives — but too small to overcome the accompanying true-positive
+loss, and without reducing the relative FP concentration in high-chl/high-nFLH water. At the
+recall-0.80 operating point the net effect is a wash. **Publishable nuance: the features
+shaved the right errors but not enough of them, and cost recall doing it — a real targeted
+effect that does not translate into net forecasting skill on this cube.**
+
+## Outputs (this section)
+- `outputs/tables/bio_validation_before_after.csv` — 15-combo PR-AUC + precision@recall-0.80 + recall grid, BEFORE/AFTER/Δ.
+- `outputs/tables/bio_fp_concentration_before_after.csv` — joint FP-rate, ratio, top-chl-Q4 share, total FP, BEFORE/AFTER.
+- `outputs/tables/error_analysis.csv` — appended 8 `bio_*` FP-concentration rows (chl-Q4, nFLH-Q4, joint both/neither, before/after).

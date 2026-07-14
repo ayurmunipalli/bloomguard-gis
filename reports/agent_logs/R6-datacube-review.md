@@ -315,3 +315,125 @@ Note (out of scope for this check, flagged for A7): the exclusion list above sti
 that is now stale for wind specifically (100% real per check 4). A7 should re-derive its
 exclusion list from current `*_is_placeholder`/`*_IS_PLACEHOLDER` flags rather than reusing
 the old list verbatim.
+
+---
+
+## Addendum — Bio-optical species-discrimination features review (2026-07-14)
+
+**Trigger:** A6 additively rebuilt `model_dataset.parquet` to join the A4b bio-optical
+(RBD/KBBI/Cannizzaro-vs-Morel bbp) discrimination features + 60 rolling/trend columns via a
+refactored shared `add_trend_features()`. Scope per the lead: independently verify the
+NEWLY-ADDED bio-optical columns for look-ahead leakage, additive integrity, KBBI
+winsorization, non-finite values, and CV-grouping-column presence. Read `R/06_build_datacube.R`
+in full (826 lines) and independently re-derived values from the raw source parquets — did not
+trust the agent log's numbers.
+
+**Overall Verdict: PASS — cleared for A7.**
+
+### 1. No look-ahead leakage on new bio trend columns — PASS (strongest check this run)
+
+Traced the shared `add_trend_features()` helper (lines 256–315) line-by-line:
+- **Calendar-day deltas**: `dt_lag <- dt[, .(cell_id, join_date = date + k, lag_val = get(col))]`
+  then `dt[dt_lag, on = .(cell_id, date = join_date), (lag_col) := i.lag_val]`. For a row at
+  date D, this matches `dt_lag` rows where `date + k == D`, i.e. the original row was at
+  `D - k`. Confirmed algebraically backward-looking for all k ∈ {1,3,5,7}, identical pattern
+  already PASSed in the 2026-07-11 review for the satellite variables.
+- **pct_chg**: pure re-derivation from the already-verified delta column; no independent join,
+  no leakage surface.
+- **Slope** (`ols_slope_k`, `shift(y, ≥1L)`) and **rollmean/rollstd** (`frollmean(align="right")`),
+  both computed `by = cell_id` after `setorder(bio, cell_id, date)` (line 419) — trailing,
+  no cross-cell contamination (data.table grouped ops reset per group by construction).
+
+**Independent end-to-end numerical reproduction (not just code trace):** pulled the raw
+`satellite_features_bio_optical.parquet` via `arrow::open_dataset()` server-side filter for 40
+label cells (233,160 raw rows, 0 duplicate (cell_id,date)), independently reimplemented delta,
+pct_chg, slope_obs5, rollmean_obs7, rollstd_obs7 for all 4 winsorized variables (`rbd`, `kbbi`,
+`bbp_ratio_morel`, `bbp_deficit`) from scratch in a separate R process, and compared to the
+values actually written in `model_dataset.parquet`:
+
+| Check | Result |
+|---|---|
+| Rows compared | 5,083 rows × 20 columns = 101,660 value pairs |
+| Mismatches | **0** |
+| Additional targeted trace (5 cells, `rbd_delta_7d`/`rbd_rollmean_obs3`/level match) | 7/7, 0 mismatches |
+
+This directly proves the join direction is backward (T−k, never T+k) and the bio join key is
+the feature date T (not shifted) — the critical risk this review exists to catch.
+
+### 2. T+H labels — PASS
+
+Independently reconstructed HAB_H{1,3,5,7,14} for 40 randomly sampled cell×date_T rows (200
+row×horizon pairs) directly from `habsos_labels.parquet` at date T+H (own lookup, not reusing
+A6's join code). **0 mismatches.** Consistent with the exhaustive 65,939-row verification in
+the 2026-07-11 review (unchanged code path — the label-shift logic was not touched by this
+extension).
+
+### 3. Additive integrity — PASS
+
+| Metric | Independently verified | A6's claim |
+|---|---|---|
+| Rows | 65,939 | 65,939 → 65,939 ✓ |
+| Duplicate (cell_id, date_T) | 0 | 0 ✓ |
+| Columns | 194 | 116 → 194 ✓ |
+| `satellite_features.parquet` dup (cell_id,date), full 27.6M-row table | 0 | (join precondition) ✓ |
+
+Left-join confirmed non-destructive: `bio_missing` is correctly OR'd into `IS_PLACEHOLDER_ROW`
+(independently rebuilt the OR-expression from its 4 constituent flags, 0 mismatches against the
+stored column — see note below on `env_IS_PLACEHOLDER`, however).
+
+### 4. KBBI winsorization — PASS
+
+- `kbbi` range in the delivered table: **[-0.997320, 0.999955]**, no `|kbbi|>1` remaining.
+- `kbbi_raw` preserved (21,950 non-NA); `kbbi` (winsorized) has 21,678 non-NA — difference is
+  exactly 272, matching `kbbi_invalid` count.
+- Consistency check: `kbbi_invalid==TRUE` count (272) == count of `!is.na(kbbi_raw) &
+  abs(kbbi_raw)>1` (272), **0** cases of flagged-but-not-reset or reset-but-not-flagged, **0**
+  cases of the flag being TRUE on an originally-NA raw value. Matches spec exactly (flag TRUE
+  only for previously non-NA out-of-range values).
+
+### 5. Non-finite values — PASS on the strict "Inf" criterion; note on NaN
+
+- **Inf/-Inf: 0** across all 165 numeric columns — independently re-swept, matches A6's
+  LEAKAGE-J.
+- **Note (not a defect):** `is.nan()` (as distinct from the broader `is.na()`) is TRUE for
+  ~4.5M cells across the feature matrix — but this is **not new to this run**. It reproduces
+  identically for the pre-existing satellite trend columns (e.g. `chlor_a_rollmean_obs3`:
+  23,922 NaN) as for the new bio trend columns (e.g. `bbp_deficit_rollmean_obs3`: 30,202 NaN).
+  Root cause: `data.table::frollmean(na.rm=TRUE)` returns `NaN` (not `NA`) when an entire
+  trailing window is NA — a known data.table quirk, not a leakage or fabrication issue. R's
+  `is.na(NaN)` is TRUE everywhere in this pipeline (joins, `stopifnot` checks, downstream
+  modeling libraries), so it is functionally handled as missing throughout. A6's own Section 4b
+  "NaN==missing" assertion only tests the 8 raw bio score columns (before
+  `add_trend_features()` runs) — it does not cover the 60 derived trend columns where this
+  quirk actually originates. Recommend A6 either broaden that assertion to post-trend columns
+  or retitle it to make the narrower scope explicit; **not blocking** since no Inf reaches the
+  matrix and NaN is caught by `is.na()` uniformly.
+
+### 6. Spatial-autocorrelation cluster flags — PASS (CV grouping column), pre-existing gap noted
+
+- `spatial_block_tiger` (the actual CV-grouping column per the Lead Directive): present, 0 NA,
+  36 distinct blocks — intact and unaffected by this run.
+- `spatial_cluster` (Queen-contiguity adjacency diagnostic): **still absent**, exactly as A6's
+  own log already documents as a pre-existing limitation (not introduced by the bio-optical
+  extension, not required for A7/R-SPLIT's spatial CV since `spatial_block_tiger` is the
+  column actually used for blocking).
+
+### Out-of-scope finding flagged for the lead (not an A6 defect, not blocking)
+
+**`IS_PLACEHOLDER_ROW` is currently 0/65,939 (0%) despite CHIRPS precip and SMAP salinity still
+being 100% placeholder (`precip_is_placeholder`/`salinity_is_placeholder` both TRUE for all
+65,939 rows, `precip_mm`/`salinity_pss` both 100% NA).** Root cause is **not** in
+`R/06_build_datacube.R` — it's `R/05_environmental_features.R:773`:
+`env[, IS_PLACEHOLDER := wind_is_placeholder & precip_is_placeholder & salinity_is_placeholder]`
+(AND, not OR). This was correct/harmless while all three were placeholder (pre-2026-07-12); now
+that ERA5 wind is real, the AND collapses `env_IS_PLACEHOLDER` to FALSE for every row even
+though 2 of 3 dynamic env features remain fake. A6 correctly propagates whatever A5 hands it
+(verified: A6's `IS_PLACEHOLDER_ROW` OR-expression is internally consistent with its inputs, 0
+mismatches) — the defect is upstream in A5's aggregation semantics, out of this review's
+charter (R6 watches A6 only) and unrelated to the bio-optical join. Flagging for the lead to
+route to A5/R5, since it silently defeats the "don't present placeholder output as real"
+guardrail at the row-summary-flag level (the underlying NA values themselves are honest — no
+fabrication — only the roll-up flag is misleading).
+
+**Verdict: PASS.** No look-ahead leakage, no label defect, no row/join corruption, KBBI holds,
+zero Inf. Cleared for A7.

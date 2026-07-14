@@ -43,6 +43,30 @@ Format: `YYYY-MM-DD — <decision #/topic> — <old value> → <new value> — <
   map the transformer as the product is a presentation decision, not license to hide a null comparison.
   (author, via lead.)
 
+## Follow-up tickets (routed by lead, not yet actioned)
+
+- **2026-07-14 — `IS_PLACEHOLDER_ROW` roll-up is silently always-FALSE (route to A5/R5).**
+  Found by R6 during the bio-optical datacube review. `R/05_environmental_features.R:773`
+  computes `env_IS_PLACEHOLDER := wind_is_placeholder & precip_is_placeholder &
+  salinity_is_placeholder` (**AND**). This was harmless while all three env sources were
+  placeholder, but now that ERA5 wind is real, the AND makes the flag FALSE for every row —
+  so `IS_PLACEHOLDER_ROW` reads 0/65,939 (0%) even though **CHIRPS precip and SMAP salinity
+  are still 100% placeholder**. The underlying NA/placeholder values are honest and the
+  per-column placeholder flags are correct; only the aggregate row-honesty roll-up is
+  misleading. **Fix:** change AND→OR at R/05:773 (a row is placeholder-tainted if ANY source
+  is), then IS_PLACEHOLDER_ROW will correctly reflect precip/salinity placeholder coverage.
+  **Not fixed now** because it is out of scope for the bio-optical dispatch, is NOT a model
+  feature (excluded from the RF per scoring_reconciliation.md, so it does not affect the
+  before/after measurement), and fixing it means re-running A5→A6. A-DOC must ensure the paper
+  does not present precip/salinity as real on the strength of this flag. (R6 found; lead routed.)
+
+- **2026-07-14 — Broaden A6's NaN==missing assertion (cosmetic, non-blocking).** A6's
+  post-build assertion checks NaN-as-missing on the 8 raw bio columns but not the 60 derived
+  bio trend columns (which carry ~4.5M NaN from `data.table::frollmean(na.rm=TRUE)` on
+  all-NA windows — a quirk that already exists in the pre-bio MODIS trend cols). `is.na()`
+  catches NaN everywhere downstream so it is functionally handled; broadening the assertion is
+  documentation hygiene only. (R6 found; low priority.)
+
 ## Open items flagged during scaffolding (2026-07-11, lead)
 
 - **HABSOS schema gap — RESOLVED (2026-07-11, A3 habsos-label).** The `occurrence.txt` was

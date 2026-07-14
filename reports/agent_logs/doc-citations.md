@@ -241,6 +241,121 @@ _Agent: A-DOC (doc-citations). Model: claude-sonnet-4-6. Initial pass: 2026-07-1
 - **MEOW CC-BY-NC**: Flagged in all files; A9 must confirm whether MEOW polygons are used in
   figures and whether target venue permits NC-licensed components.
 
+- **Bio-optical RESULTS harvest — negative finding recorded (2026-07-14, second pass)**:
+  Lead task — the bio-optical measurement landed (A10). Replaced every TBD/placeholder
+  numbers in the earlier pass with the actual before/after results, pulled verbatim from
+  `reports/agent_logs/validation.md`, `outputs/tables/bio_validation_before_after.csv`, and
+  `outputs/tables/bio_fp_concentration_before_after.csv` — no numbers invented; every figure
+  in this entry traces to one of those three files.
+
+  **What the numbers say (H=7 temporal, bit-exact, same 8,880 test rows):** PR-AUC
+  0.5022→0.4849 (−0.0173), recall@0.5 0.3553→0.3153 (−0.0400), precision@recall-0.80
+  0.2759→0.2796 (~flat). Grid: PR-AUC down 10/15, up 5/15; recall@0.5 down 12/15;
+  precision@recall-0.80 a wash (7/7/1). Mechanistic nuance: top-chl-Q4 FP 39→31 (100% of the
+  net observed-row FP cut), top-chl-Q4 FP share 73.58%→68.89%, joint high-chl/high-nFLH
+  FP-rate 12.41%→10.95% — but the FP-concentration RATIO rose 19.09×→22.35× (clean-water FPs
+  fell even faster), and the −22 FP cut was outweighed by −43 TP loss. **Recorded as a
+  legitimate negative result with a real-but-insufficient targeted effect — not softened,
+  not spun as success.**
+
+  **Files updated:**
+  - `paper/source_set.md`: replaced the "TBD" placeholder Results subsection with the full
+    measured table + mechanistic nuance + honest verdict; updated the RBD/KBBI (a) entry's
+    F0 status from "pending" to resolved (F0(667)=1522.491, F0(678)=1480.511 W m⁻²µm⁻¹,
+    NASA OBPG Spectral Bandpass Integration, Gate 2 PASS — pulled from
+    `reports/agent_logs/sat-features.md`); updated the "Rationale" line to frame RBD/KBBI as
+    a *tested hypothesis*, not an assumed benefit; updated two Limitations bullets (reused-
+    equations caveat now cites the measured negative; F0-pending caveat now marked resolved);
+    fixed 3 stale "implementer (pending)" references now that `R/04b_bio_optical_features.R`
+    exists.
+  - `reports/methods_log.md`: added a "Bio-optical features — measured model impact (A10)"
+    Results subsection (mirrors source_set.md); updated the same two Limitations bullets
+    (reused-equations + F0) to reflect the resolved/measured state; fixed 3 stale
+    "implementer, pending" references.
+  - `paper/design_rationale.md`: §6 bio-optical bullet reworded from "(implemented,
+    evidence-backed)" to "(implemented, exact-equation, empirically NEGATIVE)" with an
+    explicit instruction not to describe the addition as evidence-backed success; NOTE(cite)
+    updated with resolved F0 values; added new **§7.7** ("the bio-optical features did NOT
+    improve forecast skill") with the full headline/mechanistic-nuance/honest-verdict
+    write-up (chose a new §7.7 rather than renumbering 7.5/7.6, since source_set.md and
+    methods_log.md already cross-reference §7.3/§7.4 by number — no renumbering needed,
+    checked via grep before editing); §7.4 finding now points forward to §7.7 for the
+    measured outcome instead of just "motivates the bio-optical features"; added 2 new §8
+    Consolidated-Limitations bullets (FAI bullet updated to note the RBD/KBBI replacement
+    didn't help either; new bullet stating the features are tested-and-negative, not a
+    validated improvement).
+
+  **Verified before writing:** grepped `paper/` and `reports/` for every `§7.\d` cross-
+  reference to confirm only §7.3/§7.4 are referenced externally, so adding §7.7 (rather than
+  renumbering existing subsections) would not break any pointer. Confirmed
+  `R/04b_bio_optical_features.R` now exists on disk (26,805 bytes, timestamped 2026-07-14)
+  before removing "(pending)" implementer language.
+
+  **Not touched:** no code, model, or data/parquet files edited — docs only, consistent with
+  task scope. The pre-existing (unrelated) `outputs/figures/*.png`, `outputs/tables/*.csv`,
+  and `R/06_build_datacube.R`/`R/07_modeling.R` changes visible in `git status` at this time
+  are other agents' work (sat-features/modeling/validation), not mine.
+  — 2026-07-14
+
+- **Bio-optical citation fix + source-set pass (2026-07-14)**: Lead task — fix the known
+  Amin (2009) venue miscitation and build the publication source set for the new bio-optical
+  species-discrimination features (RBD/KBBI, Cannizzaro bbp/chl rule, Morel Case-1 reference
+  curve), sourced entirely from `reports/bio_optical_spec.md` (the lead's verified
+  exact-equation extraction of the 3 source PDFs). No code, datacube, or parquet files
+  touched — docs only, per task scope.
+
+  **Citation error fixed**: `paper/design_rationale.md` line ~143 (§9 citation anchor list)
+  miscited Amin et al. (2009) as *Continental Shelf Research* — confused with the Cannizzaro
+  (2008) entry two lines above, which is genuinely in that journal. Corrected to *Optics
+  Express* 17(11):9126–9144, doi:10.1364/OE.17.009126, with an inline correction note.
+  Grepped `paper/`, `reports/`, `references.bib` for every other "Amin"/"Continental Shelf"
+  occurrence: §6 (line 91/92) already had the correct venue, so only the one anchor-list line
+  was wrong. Also added a NOTE(cite) to §6 documenting that RBD/KBBI are defined on nLw
+  (=Rrs×F0), not Rrs — this was not previously stated in design_rationale.md at all (only in
+  the spec), and is the kind of detail an implementer or reviewer could get wrong.
+
+  **New `.bib` entries** (`paper/references.bib`, new "BIO-OPTICAL SPECIES DISCRIMINATION"
+  section): `amin2009rbd`, `cannizzaro2008bbp`, `morel1988case1`. All three DOIs resolved via
+  `curl -L https://doi.org/<doi>` to their correct publisher domains (Optica/opg.optica.org;
+  Elsevier/linkinghub.elsevier.com; AGU-Wiley/agupubs.onlinelibrary.wiley.com) — Morel and
+  Amin both returned bot-check/403 pages on the publisher side (same pattern as several
+  existing VERIFIED entries in this bib, e.g. hu2022karenia), but the DOI→domain resolution
+  itself confirms the entries are real, not invented. Marked VERIFIED given the domain match,
+  consistent with prior A-DOC precedent for 403-blocked publisher pages in this file.
+
+  **source_set.md**: added a new Methods subsection "Bio-optical species-discrimination
+  features (RBD/KBBI + Cannizzaro bbp/chl)" with three publication-ready entries (a) Amin
+  RBD/KBBI, (b) Cannizzaro low-bbp-per-chl rule, (c) Morel Case-1 reference curve — each with
+  plain-language description, exact citation, equation numbers from the spec, and
+  file/agent provenance (`R/04b_bio_optical_features.R` as the pending implementer,
+  `reports/bio_optical_spec.md` as the verified spec). Added a Results placeholder table
+  (before/after FP-rate and PR-AUC, all TBD, explicitly labeled pending-validation) and two
+  new Limitations entries: (1) these are *reused published equations*, not independently
+  re-validated for this sensor/aggregation — associations only, no causal or
+  validated-sub-cell claim; (2) F0 (NASA sensor constant) sourcing is not yet finalized —
+  pending in `reports/agent_logs/sat-features.md`; do not report RBD/KBBI numbers until the
+  unit sanity-check passes.
+
+  **methods_log.md**: added 3 technique entries (RBD/KBBI, Cannizzaro rule, Morel curve) to
+  the Data section with equation numbers and citations, and 2 Limitations entries mirroring
+  the ones above (reused-equations caveat; F0-pending caveat).
+
+  **technique_index.md**: added 3 rows to the master technique table (RBD/KBBI, Cannizzaro
+  rule, Morel curve) with file, parameters, and citation columns, marked "planned" since
+  `R/04b_bio_optical_features.R` does not exist yet (only the spec is committed).
+
+  **Deliberately left as TBD / not overstated**: (1) F0 exact numeric values — sat-features
+  agent's job, not mine; (2) any before/after model-impact number for these features —
+  validation agent's job; source_set.md placeholder table makes both facts explicit rather
+  than leaving them implicit. (3) `R/04b_bio_optical_features.R` referenced throughout as
+  "pending" / "implementer" since it doesn't exist in the repo yet — the spec
+  (`reports/bio_optical_spec.md`) is the only committed artifact so far; docs point at the
+  spec as authoritative and at the script path as where the equations will land.
+
+  **Files touched:** `paper/design_rationale.md`, `paper/references.bib`,
+  `paper/source_set.md`, `reports/methods_log.md`, `reports/technique_index.md`,
+  `reports/agent_logs/doc-citations.md` (this entry). No code/data files touched. — 2026-07-14
+
 - **A7 modeling harvest (2026-07-11)**: Read `R/07_modeling.R` (727 lines) and
   `reports/agent_logs/modeling.md`. Two bib citations VERIFIED via parallel WebSearch:
   - `breiman2001rf`: Breiman, L. (2001). "Random Forests." *Machine Learning* 45(1):5–32.

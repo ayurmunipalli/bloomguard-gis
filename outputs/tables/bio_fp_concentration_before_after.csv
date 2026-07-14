@@ -1,0 +1,11 @@
+era,metric,value
+before,joint_both_Q4_fp_rate,0.1241
+after,joint_both_Q4_fp_rate,0.1095
+before,joint_neither_fp_rate,0.0065
+after,joint_neither_fp_rate,0.0049
+before,joint_ratio_both_vs_neither,19.09
+after,joint_ratio_both_vs_neither,22.35
+before,share_all_fp_in_top_chl_Q4,0.7358
+after,share_all_fp_in_top_chl_Q4,0.6889
+before,total_fp_at_0.5,254
+after,total_fp_at_0.5,232

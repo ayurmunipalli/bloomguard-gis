@@ -268,3 +268,103 @@ Split-construction code was reported unchanged; scope here is to confirm that.
 boundaries. No new leakage introduced. The two 2026-07-11 caveats (Sarasota prevalence
 confound on the spatial split; zero-embargo H=14 boundary bleed, ~49 rows/0.33%) remain in force
 and must accompany any reporting of the new wind-augmented model numbers.
+
+---
+
+## Addendum (2026-07-14, R-SPLIT) — Re-verification after bio-optical features added
+
+**Trigger:** A7 retrained Stage-1 RF with 71 new bio-optical discrimination features
+(RBD/KBBI, bbp_ratio_morel/bbp_deficit, nLw(667/678), published-rule flags + 60 trend
+variants; `model_dataset.parquet` grew 65,939×114 → 65,939×194). A7 reported the split
+logic byte-identical to the previously-signed-off pipeline. Scope here: re-confirm that
+claim and re-verify split integrity against the new `best_model.rds`.
+
+### 1. Diff-check — split construction code unchanged
+
+`git diff -- R/07_modeling.R` (uncommitted, working tree vs last commit) shows the only
+changes are: header/NOTE comments, a `FEATURE_SET_TAG <- "bio_inclusive"` metadata string
+(does not affect training), 7 new entries added to `ALWAYS_EXCLUDE` (`kbbi_raw`,
+`kbbi_invalid`, `bio_missing`, `bio_cloud_flag`, `bio_feature_filled`,
+`bio_IS_PLACEHOLDER`, `bio_chl_missing` — all bio-optical QC/meta flags, none are
+`cell_id`/`date_T`/`spatial_block_tiger`/`year`, so none touch split keys), a new
+per-horizon `is.infinite()` STOP-guard on bio feature columns (feature-integrity check,
+not split logic), and a new BEFORE-vs-AFTER reporting block appended after model training
+completes (reads a frozen backup CSV for comparison, writes
+`bio_before_after_comparison.csv`; runs after all splitting/training is done).
+
+**Not touched by the diff:** `TRAIN_FRAC` (L~101), `TEMPORAL_CUTOFF_YEAR` (L~101, still
+`2016L`), `MIN_BLOCK_ROWS`/`merge_tiny_blocks()`, the `year` derivation
+(`dt[["year"]] <- as.integer(substr(...))`), `feat_cols <- setdiff(names(h_dt), c(excl_H,
+target_col, "year"))`, `set.seed(SEED + H)` + `pos_idx`/`neg_idx`/`sample()` (random
+split), `temp_train_idx`/`temp_test_idx <- which(h_dt$year < / >= TEMPORAL_CUTOFF_YEAR)`
+(temporal split), and the spatial-block holdout (`block_sizes`, `cumulative >= 0.15`,
+`holdout_blocks`, `spat_test_idx`). Confirmed by direct inspection of current line
+content, not just diff absence — these blocks read byte-identical to the 2026-07-13
+addendum's citations, only shifted a few lines by inserted comments elsewhere.
+
+### 2. Independent re-derivation from the retrained `model_dataset.parquet`
+
+Re-ran the split logic independently (`Rscript --vanilla`, renv lib path, arrow +
+data.table) directly against the new 195-column dataset (194 feature/label cols + derived
+`year`), reproducing `07_modeling.R`'s exact split code:
+
+| H | rows | temp_train | temp_test | spatial holdout block(s) | spat_test | spat_test% |
+|---|---|---|---|---|---|---|
+| 1 | 7,791 | 4,787 | 3,004 | 12_115 | 3,279 | 42.1% |
+| 3 | 4,765 | 2,813 | 1,952 | 12_115 | 2,228 | 46.8% |
+| 5 | 6,151 | 3,474 | 2,677 | 12_115 | 2,399 | 39.0% |
+| 7 | 23,751 | 14,871 | 8,880 | 12_115 | 6,576 | 27.7% |
+| 14 | 23,889 | 14,868 | 9,021 | 12_115 | 6,388 | 26.7% |
+
+Row counts and spatial holdout (**always and only block 12_115 / Sarasota County**, same
+row counts and percentages) are **byte-identical** to the 2026-07-11 review table and the
+2026-07-13 addendum. Adding 80 new columns did not change which rows exist, which cell
+falls in which spatial block, or which rows fall before/after the 2016 cutoff — expected,
+since none of `cell_id`/`date_T`/`year`/`spatial_block_tiger` changed.
+
+**H=14 embargo re-check (the previously-flagged boundary case):** re-computed bleed rows
+(train rows where `date_T + H` lands ≥ 2016-01-01) directly against the new dataset:
+
+| H | bleed rows | % of train | cells affected |
+|---|---|---|---|
+| 1 | 1 | 0.021% | 1 |
+| 3 | 3 | 0.107% | 3 |
+| 5 | 12 | 0.345% | 10 |
+| 7 | 23 | 0.155% | 20 |
+| 14 | **49** | 0.330% | 33 |
+
+Exact match to the 2026-07-11 table, all five horizons. **The H=14 zero-embargo boundary
+bleed is unchanged, not newly worsened.**
+
+### 3. Direct check against the retrained `best_model.rds` artifact
+
+Loaded the new `outputs/models/best_model.rds` (`feature_set = "bio_inclusive"`,
+confirming this is the post-bio retrain) and compared its stored `train_idx`/`test_idx`
+(H=7, temporal) against the independently-recomputed temporal split indices:
+
+- `length(test_idx)` = 8,880 both ways.
+- `setequal(recomputed, stored)` = **TRUE**; `identical(recomputed, stored)` = **TRUE**
+  (same set, same order).
+- `max(year)` among stored `train_idx` rows = **2015**; `min(year)` among stored
+  `test_idx` rows = **2016**. No cross-boundary rows in either direction.
+- `best$feat_cols`: `"year"` absent (correctly excluded as split key); `"month"`/`"doy"`
+  present (correctly included as features, per `scoring_reconciliation.md`'s authoritative
+  rule); the 8 checked bio-optical level features (`rbd`, `kbbi`, `bbp_551`,
+  `bbp_morel_550`, `bbp_ratio_morel`, `bbp_deficit`, `nlw_667`, `nlw_678`) are present as
+  trained features, as A7 intended.
+
+### Verdict: **PASS — split construction unaffected, retrained best_model.rds cleared**
+
+The bio-optical feature addition did not alter split construction, row membership, fold
+boundaries, or the retained model's stored train/test indices. No new leakage introduced.
+The two standing caveats from 2026-07-11 remain in force and must continue to accompany
+any reporting of the bio-inclusive model numbers:
+
+1. Spatial split holds out only Sarasota County (12_115), which has 1.4–1.5× the HAB
+   positive rate of the rest of the data — spatial PR-AUC is prevalence-inflated, not
+   evidence of geographic generalization.
+2. H=14 temporal split has a 49-row (0.33%) zero-embargo boundary bleed, unchanged in
+   count, percentage, or affected cells.
+
+No action required of `modeling`. A7's bio-inclusive `best_model.rds` (H=7, temporal) is
+cleared on split-integrity grounds.

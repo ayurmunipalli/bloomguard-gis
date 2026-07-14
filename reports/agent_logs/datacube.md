@@ -160,3 +160,191 @@
 | Header + NOTE tags present | ✅ PASS | |
 | Agent log written | ✅ PASS | This file |
 | Script re-runnable (idempotent) | ✅ PASS | Overwrites output on re-run |
+
+---
+
+# 2026-07-14 extension — bio-optical species-discrimination features (A4b harvest)
+
+**Task:** Rebuild `model_dataset.parquet` ADDITIVELY to bring in the A4b bio-optical
+(RBD/KBBI/Cannizzaro-vs-Morel bbp) species-discrimination features + rolling/trend
+variants, left-joined onto the existing cube, with T+H labels re-attached and no
+new look-ahead leakage. Existing MODIS cube inputs, HABSOS labels, env/static
+features untouched.
+
+## Decisions
+
+- **Join type: LEFT, never inner.** `satellite_features_bio_optical.parquet`
+  (27,641,118 rows, 5,829 dates, 4,742 cells — A4b output, verified 0 dup
+  (cell_id,date) groups, IS_PLACEHOLDER=0) is joined onto the same row space
+  the cube already uses, exactly the same left-join pattern as the existing
+  `satellite_features.parquet` join. Missing bio values (cloud/no joint
+  retrieval, or the 1 grid cell absent from the bio table) become NA, never
+  dropped rows. — 2026-07-14
+
+- **KBBI winsorization (mandatory).** Amin (2009) Eq.20's published formula has
+  no epsilon guard on its `nLw(678)+nLw(667)` denominator; A4b's log
+  (`sat-features.md`) documents raw KBBI reaching ~±23,000 in dark/turbid/
+  land-adjacent edge cells where that denominator is near zero. KBBI is a
+  normalized index physically bounded to [-1,1], so `abs(kbbi) > 1` is an
+  unreliable retrieval, not a real value. Fixed at the CUBE layer, not by
+  touching the A4b formula: `kbbi := NA` where `abs(kbbi) > 1`; raw value kept
+  as `kbbi_raw`; `kbbi_invalid` flags exactly the values reset to NA (TRUE only
+  for previously non-NA out-of-range values — NaN/NA inputs stay FALSE, since
+  they were already missing, not invalid). — 2026-07-14
+
+- **Trend/rolling treatment reused, not reinvented.** Refactored the existing
+  inline delta/pct-change/slope/rolling-mean-std loop (previously hardcoded
+  for `chlor_a_mean`/`sst_mean`/`nflh_mean`/`Kd_490_mean`) into a shared
+  `add_trend_features(dt, level_cols, ...)` helper, called once for the
+  satellite levels (unchanged output, R6-verified formulas) and once for the
+  bio levels `rbd`, `kbbi` (winsorized), `bbp_ratio_morel`, `bbp_deficit`.
+  Same delta lags {1,3,5,7}, slope windows {3,5,7}, rolling windows {3,7},
+  same ε=1e-6 pct-change guard — no parallel scheme. — 2026-07-14
+
+- **Bug found and fixed during this run: data.table by-reference propagation
+  across a function boundary.** The first version of `add_trend_features()`
+  relied on `:=` modifying `dt` by reference with no return value. Live run
+  showed only the FIRST level column's delta columns + the pre-existing
+  threshold flag survived in `sat` after the call — everything else (pct_chg,
+  slope, rollmean/rollstd for chlor_a, and ALL trend cols for sst/nflh/Kd_490)
+  silently vanished, with R emitting "a shallow copy of this data.table was
+  taken..." warnings from the `by=cell_id` grouped assignments. Root cause:
+  data.table's reference semantics can shallow-copy a table passed as a
+  function argument partway through a `by=`-grouped `:=`, and the caller's
+  original binding doesn't see modifications made after that copy. Fixed by
+  having the function `return(dt)` and reassigning at both call sites
+  (`sat <- add_trend_features(sat, ...)`, `bio <- add_trend_features(bio, ...)`).
+  Verified the fix by re-running and confirming the correct column counts (61
+  satellite trend cols, 60 bio trend cols) landed. — 2026-07-14
+
+- **Memory guard, second incident this run: 16 GB vector-memory limit hit.**
+  Holding `sat_raw`/`bio_raw` (each ~8.5M rows, label-cell-filtered) alongside
+  `sat`/`bio` (same row count + 60-64 new columns each) plus the `copy()` calls
+  building `sat_join`/`bio_join` for the Section 6 merge pushed peak memory
+  past this machine's 16 GB `mem.maxVSize()` limit (observed live: "Error:
+  vector memory limit of 16.0 Gb reached" during the base join). Fixed by (1)
+  capturing the small scalars/name-vectors still needed from `sat_raw`/`bio_raw`
+  (column names for the trend-cols diff, unique-date count, non-NA KBBI count)
+  immediately after they're computed, then `rm()` + `gc()` on the 8.5M-row raw
+  tables as soon as those are captured — they are not otherwise reused; (2)
+  aliasing `sat`/`bio` directly as `sat_join`/`bio_join` (mutate in place, rename
+  before merge) instead of taking an extra full `copy()`, since `sat`/`bio` are
+  not referenced again after the join; (3) `rm()` + `gc()` on `sat`/`sat_join`
+  and `bio`/`bio_join` immediately after each is consumed by its `merge()` call.
+  No functional/output change — purely a peak-memory fix, re-verified the run
+  completes and produces identical row/column counts and assertion results
+  after the fix. — 2026-07-14
+
+- **Dropped bio-side intermediate columns, not carried into model_dataset.**
+  `Rrs_667_mean`/`Rrs_678_mean`/`bbp_443_mean`/`bbp_s_mean` (+ their `_n_valid`
+  companions) are intermediates to the published nLw/RBD/KBBI/bbp_551
+  formulas; their information is fully captured by the derived scores
+  (`nlw_667`, `nlw_678`, `rbd`, `kbbi`, `bbp_551`). Also dropped bio's own
+  read-only copy of `chlor_a_mean` (used internally by A4b only to compute the
+  Cannizzaro/Morel score) since the cube already carries `chlor_a_mean` from
+  A4's `satellite_features.parquet` — kept the original, not the duplicate, to
+  avoid a name collision and any ambiguity about provenance. — 2026-07-14
+
+- **`bio_missing` flag added, mirroring `satellite_missing`.** TRUE only when
+  no bio-optical row was joined at all for a (cell_id, date) pair (e.g. the 1
+  grid cell absent from the bio-optical table across its full time series, per
+  A4b's log) — distinct from an ordinary cloud-gap NA inside an otherwise-
+  joined bio row. Folded into `IS_PLACEHOLDER_ROW`'s OR-condition alongside
+  `satellite_missing`, for the same reason (a row where the source table
+  itself has no data at all is not "fully observed", separate from honest
+  per-value missingness within an observed row). — 2026-07-14
+
+## Data sources used
+
+- `satellite_features_bio_optical.parquet` (A4b) — local file — 2026-07-14 —
+  read-only input, joined into model_dataset for the first time this run.
+
+## Methods & techniques
+
+- **`add_trend_features()` helper** — refactor of the pre-existing inline
+  delta/pct-change/slope/rolling loop into a reusable function, applied
+  identically to satellite levels and bio-optical scores. `R/06_build_datacube.R`.
+- **KBBI winsorization** — `kbbi := NA where abs(kbbi) > 1`, `kbbi_raw` kept,
+  `kbbi_invalid` flag. `R/06_build_datacube.R` Section 4b.
+- **Left-join, sentinel-flag pattern** — reused the existing `*_date_present__`
+  sentinel-column technique (already used for `satellite_missing`) for the new
+  `bio_missing` flag, so a genuinely-absent join row is distinguishable from an
+  honest in-row NA. `R/06_build_datacube.R` Section 6.
+- **Non-finite (Inf/-Inf) sweep** — `vapply` over every numeric column in the
+  final table checking `is.infinite()`, asserted zero. `R/06_build_datacube.R`
+  Section 9, LEAKAGE-J.
+
+## Row/column reconciliation (mission hard requirement #1)
+
+| Metric | Pre-bio | Post-bio | Delta |
+|---|---|---|---|
+| Rows | 65,939 | 65,939 | 0 (exact match, asserted) |
+| Columns | 116 | 194 | +78 |
+| Duplicate (cell_id, date_T) groups | 0 | 0 | — |
+
+New columns (78): `bio_missing`, `bio_chl_missing`, `bio_IS_PLACEHOLDER`,
+`kbbi_raw`, `kbbi_invalid`, plus levels `nlw_667`, `nlw_678`, `rbd`, `kbbi`,
+`rbd_detect`, `kbbi_kbrevis`, `bbp_551`, `bbp_morel_550`, `bbp_ratio_morel`,
+`bbp_deficit`, `cannizzaro_kbrevis`, `bio_cloud_flag`, `bio_feature_filled`,
+plus 60 trend columns (15 each for `rbd`/`kbbi`/`bbp_ratio_morel`/`bbp_deficit`:
+4 calendar-day deltas + 4 pct-change + 3 OLS slopes + 2 rolling means + 2
+rolling stds).
+
+## KBBI winsorization result
+
+- Full label-cell-filtered bio table (8,516,169 rows, pre-join): 16,378 of
+  3,055,418 non-NA KBBI values had `abs(kbbi) > 1` → reset to NA.
+- Final model_dataset (65,939 rows, post-join to HABSOS observation dates):
+  272 of 21,950 non-NA raw KBBI values were invalid (`kbbi_invalid = TRUE`);
+  `kbbi` range after winsorization independently verified as
+  `[-0.9973197, 0.9999552]` ⊂ [-1,1].
+
+## Leakage assertion result
+
+All existing assertions (A-E) still pass unchanged. Added and passed:
+**G** (bio join row count preserved, 65,939 → 65,939), **H** (KBBI
+winsorization holds in the final table, max|kbbi|=1), **I** (all 60 expected
+bio trend/delta columns present: 16 delta + 16 pct_chg + 28 slope/roll), **J**
+(zero Inf/-Inf across all 165 numeric columns in the final table — independently
+re-verified by direct parquet read after write, 0 confirmed). Independent
+spot-check of 5 random HAB_H7 rows against `habsos_labels.parquet` at T+7: 5/5
+exact match (same pattern as R6's original exhaustive verification).
+
+## Open questions / caveats / limitations
+
+- **NOTE(limitation):** KBBI (Amin 2009 Eq.20) instability is a property of the
+  published formula near a zero denominator, not a pipeline bug — see A4b's
+  log for the full physical explanation. Winsorization is a cube-layer fix
+  (A6), the A4b formula itself is untouched (per spec, "keep published
+  equations").
+- **NOTE(limitation):** bio-optical scores are ~74% missing at the daily level
+  (cloud/no-joint-retrieval across 2-4 independent MODIS products); the
+  rolling-mean-over-observed-window treatment (same machinery as chlor_a)
+  recovers substantially more non-NA coverage for the rollmean/rollstd
+  variants than for the raw daily scores or 1-day deltas (e.g.
+  `bbp_deficit_rollmean_obs7` non-NA in 50,655 of 65,939 rows vs. `rbd` itself
+  non-NA in ~21,950) — same qualitative pattern as chlor_a/SST/nFLH/Kd_490.
+- **NOTE(limitation):** `datacube.rds` / `model_dataset.gpkg` (mentioned in
+  PLAN.md §4/§6 as A6 outputs) are not produced by the existing
+  `R/06_build_datacube.R` — this was already the case before this extension
+  (only `model_dataset.parquet` is written) and is out of scope for this
+  additive bio-optical harvest; flagged for the lead, not fixed here.
+- **NOTE(paper):** The `add_trend_features()` refactor + the data.table
+  by-reference propagation bug (found and fixed live this run) is worth a
+  methods-note if the paper discusses reproducibility tooling: passing a
+  data.table into a function and relying on `:=` to modify the caller's copy
+  is NOT always safe when combined with `by=`-grouped assignments; the fix
+  (return + reassign at call site) is the documented-safe pattern.
+
+## Done-criteria (2026-07-14 mission) — pass/fail
+
+| Criterion | Status | Note |
+|---|---|---|
+| Bio features left-joined, no row blow-up/loss | ✅ PASS | 65,939 → 65,939, asserted twice (join-time + final) |
+| KBBI winsorized to [-1,1], `kbbi_invalid` flag, raw kept | ✅ PASS | 272 of 21,950 non-NA reset to NA in final table |
+| NaN treated identically to NA | ✅ PASS | Explicit assertion, 0 mismatches across 8 bio score cols |
+| Rolling/trend treatment reused via shared helper | ✅ PASS | `add_trend_features()`, 60 new trend cols |
+| No new look-ahead leakage | ✅ PASS | Assertions G/H/I/J added and passed; existing A-E unchanged |
+| Zero non-finite values in final feature matrix | ✅ PASS | 0 Inf/-Inf across 165 numeric cols, independently re-verified |
+| Header + NOTE tags updated | ✅ PASS | |
+| Agent log updated | ✅ PASS | This section |

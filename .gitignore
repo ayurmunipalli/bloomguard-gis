@@ -22,6 +22,9 @@ paper/refs_pdfs/**
 !paper/refs_pdfs/.gitkeep
 
 # Large binary / geospatial artifacts
+# Regenerable parquet dumps under outputs/ (e.g. predictions_before_after.parquet)
+# — reproducible from the R scripts; keep the human-readable result CSVs, not these.
+outputs/**/*.parquet
 *.tif
 *.tiff
 *.nc

@@ -51,3 +51,11 @@ threshold_sensitivity,0.45,8880,1075,472,322,603,7483,0.4391,0.5945,0.5609,,0.12
 threshold_sensitivity,0.5,8880,1075,382,254,693,7551,0.3553,0.6006,0.6447,,0.1211
 threshold_sensitivity,0.55,8880,1075,310,195,765,7610,0.2884,0.6139,0.7116,,0.1211
 threshold_sensitivity,0.6,8880,1075,240,130,835,7675,0.2233,0.6486,0.7767,,0.1211
+bio_chlorQ4_before,chl_Q4,671,,,39,,476,,,,0.0757,
+bio_chlorQ4_after,chl_Q4,671,,,31,,484,,,,0.0602,
+bio_nflhQ4_before,nflh_Q4,559,,,22,,392,,,,0.0531,
+bio_nflhQ4_after,nflh_Q4,559,,,20,,394,,,,0.0483,
+bio_joint_bothQ4_before,both_top_Q4,226,,,17,,120,,,,0.1241,
+bio_joint_bothQ4_after,both_top_Q4,226,,,15,,122,,,,0.1095,
+bio_joint_neither_before,neither_top_Q4,1344,,,8,,1214,,,,0.0065,
+bio_joint_neither_after,neither_top_Q4,1344,,,6,,1216,,,,0.0049,

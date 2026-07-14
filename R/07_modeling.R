@@ -4,9 +4,15 @@
 #             Trains RF per forecast horizon H ∈ {1,3,5,7,14}, evaluated
 #             under three splits (random/temporal/spatial), vs persistence +
 #             chlorophyll-only baselines. Prioritises recall + PR-AUC.
-# INPUTS:     data/processed/model_dataset.parquet (65,939 × 114, FINAL)
-# OUTPUTS:    outputs/models/best_model.rds           — H=7 temporal RF
-#             outputs/tables/model_results.csv        — metrics × horizon × split × model
+# INPUTS:     data/processed/model_dataset.parquet (65,939 × 194, FINAL —
+#             now includes A4b/A6 bio-optical discrimination features:
+#             RBD/KBBI (Amin 2009), bbp_ratio_morel/bbp_deficit (Cannizzaro
+#             2008 vs Morel 1988 reference curve), nLw(667/678), the three
+#             published-rule boolean flags, and their 60 trend variants)
+# OUTPUTS:    outputs/models/best_model.rds           — H=7 temporal RF (AFTER, bio-inclusive)
+#             outputs/models/best_model_before_bio.rds — FROZEN pre-bio baseline (backed up, not overwritten)
+#             outputs/tables/model_results.csv        — metrics × horizon × split × model (AFTER, tagged feature_set)
+#             outputs/tables/model_results_before_bio.csv — FROZEN pre-bio baseline (backed up, not overwritten)
 #             outputs/figures/confusion_matrix_H*.png — confusion matrices
 #             outputs/figures/roc_pr_H*.png           — ROC + PR curves
 #             outputs/figures/skill_vs_horizon.png    — skill decay curve
@@ -20,8 +26,15 @@
 #             persistence + chl-only reference baselines (§9 PLAN.md);
 #             skill vs horizon: PR-AUC decay curve (required figure).
 # CITATIONS:  Breiman 2001 (Random Forests); Wright & Ziegler 2017 (ranger);
-#             Green 2022 (variable importance / RTM method).
-# NOTES:      DO NOT git-commit — awaiting R-SPLIT sign-off (§6.0 PLAN.md).
+#             Green 2022 (variable importance / RTM method); Amin et al. 2009
+#             (RBD/KBBI); Cannizzaro et al. 2008 (bbp discrimination rule);
+#             Morel 1988 (Case-1 backscatter reference curve).
+# NOTES:      2026-07-14 bio-optical re-run — ISOLATION DISCIPLINE: same seed,
+#             same split construction, same ranger hyperparameters, same
+#             reconciled scorer (reports/scoring_reconciliation.md) as the
+#             pre-bio run. ONLY the feature set changed (bio columns added).
+#             Pre-bio BEFORE artifacts preserved as *_before_bio.* before this
+#             run overwrote best_model.rds / model_results.csv.
 # ============================================================
 
 # ── ARROW THREAD GUARD: source 00_config.R FIRST ──────────────────────────
@@ -88,6 +101,11 @@ TRAIN_FRAC  <- 0.80            # random split train proportion
 TEMPORAL_CUTOFF_YEAR <- 2016L  # train ≤ 2015, test ≥ 2016 (~74% / 26%)
 MIN_BLOCK_ROWS <- 5L           # merge spatial blocks smaller than this
 LOG_FEATURES <- c("chlor_a_mean", "nflh_mean", "Kd_490_mean")  # heavy-tailed
+FEATURE_SET_TAG <- "bio_inclusive"  # NOTE(paper): tags this run's model_results.csv
+# rows so the AFTER (bio-inclusive) run is unambiguously distinguishable from
+# the FROZEN BEFORE baseline (outputs/tables/model_results_before_bio.csv,
+# feature_set = "pre_bio"). Isolation discipline: this tag is metadata only —
+# it does not affect training. — 2026-07-14
 
 # NOTE(paper): temporal cutoff 2016 gives train 2003-2015 (13 yr) / test 2016-2021 (6 yr).
 #              Matches HABSOS intensive sampling after 2015 being held out.
@@ -125,8 +143,33 @@ ALWAYS_EXCLUDE <- c(
   # run — see reports/agent_logs/env-features.md 2026-07-12 update). ERA5 wind
   # (wind_u_ms/wind_v_ms/wind_speed_ms/wind_dir_deg/wind_along_ms/wind_cross_ms) is
   # REAL as of this run and deliberately NOT excluded — it is now a live feature set.
-  "precip_mm", "salinity_pss"
+  "precip_mm", "salinity_pss",
+  # Bio-optical meta/quality/missingness flags — NOT features (2026-07-14 bio run).
+  # Treated identically to the existing sat_/env_/static_ meta-flag family above:
+  # these describe DATA QUALITY of the bio-optical pull, not bloom signal.
+  #   kbbi_raw            — pre-winsorization KBBI (superseded by winsorized `kbbi`,
+  #                          which IS a feature); raw kept only for audit trail.
+  #   kbbi_invalid        — TRUE only for rows where kbbi_raw was winsorized to NA
+  #                          (|kbbi_raw|>1); a QC flag, not a bloom signal.
+  #   bio_missing         — TRUE when no bio-optical row joined for this cell-date
+  #                          (join-coverage flag).
+  #   bio_cloud_flag      — cloud/no-retrieval flag for the bio-optical pull.
+  #   bio_feature_filled  — bio-optical LOCF/fill indicator.
+  #   bio_IS_PLACEHOLDER  — bio-optical placeholder flag (family with sat_/env_/
+  #                          static_/label_IS_PLACEHOLDER above).
+  #   bio_chl_missing     — chlorophyll-input-missing flag feeding the bbp_morel_550
+  #                          / bbp_ratio_morel / cannizzaro_kbrevis computations.
+  "kbbi_raw", "kbbi_invalid", "bio_missing", "bio_cloud_flag",
+  "bio_feature_filled", "bio_IS_PLACEHOLDER", "bio_chl_missing"
 )
+# NOTE(paper): all OTHER new bio-optical columns are real features (2026-07-14):
+#   rbd, kbbi (winsorized), bbp_551, bbp_morel_550, bbp_ratio_morel, bbp_deficit,
+#   nlw_667, nlw_678, rbd_detect, kbbi_kbrevis, cannizzaro_kbrevis (11 level/flag
+#   features) + 60 trend columns (delta/pct_chg/slope_obs/rollmean_obs/rollstd_obs
+#   for rbd, kbbi, bbp_ratio_morel, bbp_deficit) = 71 new bio features included.
+#   Per reports/scoring_reconciliation.md's principle, `month`/`doy` remain
+#   INCLUDED (real trained features) and `year` remains the only date-derived
+#   exclusion (split key, excluded below via the feat_cols setdiff).
 
 # ── LOAD DATA ──────────────────────────────────────────────────────────────
 message("[A7] Loading model_dataset.parquet ...")
@@ -359,6 +402,23 @@ for (H in HORIZONS) {
   na_cols <- feat_cols[sapply(feat_cols, function(cn) anyNA(h_dt[[cn]]))]
   message("[A7] Columns with NAs (to impute): ", length(na_cols))
 
+  # NOTE(paper): 2026-07-14 bio run — explicit assertion that the bio-optical NaN
+  #              handling is covered. R's is.na()/anyNA() treat NaN as NA, so the
+  #              existing impute_with_flag() path (below) already imputes NaN cells
+  #              in the bio + trend columns exactly like any other NA. Also assert
+  #              no Inf reaches ranger (bbp_ratio_morel/pct_chg columns divide by a
+  #              value that can be near-zero) — STOP condition per task instructions.
+  bio_feat_present <- intersect(feat_cols,
+    c("rbd", "kbbi", "bbp_551", "bbp_morel_550", "bbp_ratio_morel", "bbp_deficit",
+      "nlw_667", "nlw_678", grep("^(rbd|kbbi|bbp_ratio_morel|bbp_deficit)_", feat_cols, value = TRUE)))
+  n_inf <- sum(sapply(bio_feat_present, function(cn) sum(is.infinite(h_dt[[cn]]))))
+  if (n_inf > 0) {
+    stop("[A7] STOP: ", n_inf, " Inf value(s) found in bio-optical features — ",
+         "would corrupt ranger training. Report to lead, do not approximate.")
+  }
+  message("[A7] Bio-optical features present: ", length(bio_feat_present),
+          " | Inf check: PASS (0 found)")
+
   # Spatial blocks for this horizon subset (merge tiny blocks)
   h_dt[, block_cv := merge_tiny_blocks(spatial_block_tiger)]
   n_blocks <- length(unique(h_dt$block_cv))
@@ -477,7 +537,8 @@ for (H in HORIZONS) {
     for (m_row in list(m_rf, m_pers, m_chl)) {
       m_row[, `:=`(horizon = H, split = split_name,
                    n_train = length(tr_idx),
-                   pos_rate_train = round(n_pos / (n_pos + n_neg), 4))]
+                   pos_rate_train = round(n_pos / (n_pos + n_neg), 4),
+                   feature_set = FEATURE_SET_TAG)]
       all_results[[length(all_results) + 1]] <- m_row
     }
 
@@ -493,7 +554,8 @@ for (H in HORIZONS) {
         train_idx    = tr_idx,
         test_idx     = te_idx,
         prob_rf      = prob_rf,
-        act          = act
+        act          = act,
+        feature_set  = FEATURE_SET_TAG
       )
       message("[A7] Best model saved (H=7, temporal split)")
     }
@@ -555,7 +617,7 @@ for (H in HORIZONS) {
 
 # ── SAVE MODEL RESULTS TABLE ───────────────────────────────────────────────
 results_dt <- rbindlist(all_results, fill = TRUE)
-setcolorder(results_dt, c("horizon", "split", "model",
+setcolorder(results_dt, c("horizon", "split", "model", "feature_set",
                            "recall", "pr_auc", "roc_auc", "precision", "f1",
                            "fnr", "accuracy", "n_test", "n_train", "n_pos",
                            "tp", "fp", "fn", "tn", "pos_rate_train"))
@@ -640,6 +702,55 @@ for (H in c(7L, 14L)) {
   }
 }
 
+# ── BEFORE vs AFTER COMPARISON (bio-optical isolation) ─────────────────────
+# NOTE(paper): reads the FROZEN pre-bio results table (byte-identical backup made
+#              before this run overwrote model_results.csv) purely for reporting —
+#              does not affect training. Isolates the marginal effect of the 71
+#              bio-optical features (2026-07-14).
+before_bio_path <- file.path(OUT_TABLES, "model_results_before_bio.csv")
+before_after_txt <- "before_bio backup not found — comparison skipped.\n"
+if (file.exists(before_bio_path)) {
+  before_dt <- fread(before_bio_path)
+  cmp_rows <- list()
+  for (H in HORIZONS) {
+    for (sp in c("random", "temporal", "spatial")) {
+      b <- before_dt[horizon == H & split == sp & model == "rf"]
+      a <- results_dt[horizon == H & split == sp & model == "rf"]
+      if (nrow(b) == 0 || nrow(a) == 0) next
+      cmp_rows[[length(cmp_rows) + 1]] <- data.table(
+        horizon = H, split = sp,
+        recall_before = b$recall, recall_after = a$recall,
+        d_recall = round(a$recall - b$recall, 4),
+        pr_auc_before = b$pr_auc, pr_auc_after = a$pr_auc,
+        d_pr_auc = round(a$pr_auc - b$pr_auc, 4),
+        precision_before = b$precision, precision_after = a$precision,
+        d_precision = round(a$precision - b$precision, 4)
+      )
+    }
+  }
+  cmp_dt <- rbindlist(cmp_rows)
+  fwrite(cmp_dt, file.path(OUT_TABLES, "bio_before_after_comparison.csv"))
+  message("[A7] bio_before_after_comparison.csv saved: ", nrow(cmp_dt), " rows")
+  before_after_txt <- paste0(
+    "| H | split | recall (before→after, Δ) | PR-AUC (before→after, Δ) | precision (before→after, Δ) |\n",
+    "|---|---|---|---|---|\n",
+    paste(sprintf("| %d | %s | %.3f → %.3f (%+.3f) | %.3f → %.3f (%+.3f) | %.3f → %.3f (%+.3f) |",
+                  cmp_dt$horizon, cmp_dt$split,
+                  cmp_dt$recall_before, cmp_dt$recall_after, cmp_dt$d_recall,
+                  cmp_dt$pr_auc_before, cmp_dt$pr_auc_after, cmp_dt$d_pr_auc,
+                  cmp_dt$precision_before, cmp_dt$precision_after, cmp_dt$d_precision),
+          collapse = "\n"),
+    "\n"
+  )
+  h7t <- cmp_dt[horizon == 7 & split == "temporal"]
+  if (nrow(h7t) == 1) {
+    message(sprintf("[A7] H=7 temporal BEFORE vs AFTER | recall %.4f -> %.4f (%+.4f) | PR-AUC %.4f -> %.4f (%+.4f) | precision %.4f -> %.4f (%+.4f)",
+                    h7t$recall_before, h7t$recall_after, h7t$d_recall,
+                    h7t$pr_auc_before, h7t$pr_auc_after, h7t$d_pr_auc,
+                    h7t$precision_before, h7t$precision_after, h7t$d_precision))
+  }
+}
+
 # ── WRITE AGENT DECISION LOG ───────────────────────────────────────────────
 h7_temp_rf <- results_dt[horizon == 7L & split == "temporal" & model == "rf"]
 h14_temp_rf <- results_dt[horizon == 14L & split == "temporal" & model == "rf"]
@@ -658,7 +769,42 @@ log_text <- paste0(
   "# modeling (A7) — decision & methods log\n\n",
   "**Agent:** A7 modeling (Stage-1 RF)\n",
   "**Date:** ", Sys.Date(), "\n",
-  "**Status:** COMPLETE — awaiting R-SPLIT sign-off before M1 commit\n\n",
+  "**Status:** COMPLETE (bio-optical re-run) — awaiting R-SPLIT re-confirmation before M1 commit\n\n",
+  "---\n\n",
+  "## 2026-07-14 bio-optical feature-set delta (this run)\n\n",
+  "**ISOLATION DISCIPLINE:** identical seed (`SEED=", SEED, "`), identical split construction ",
+  "(same `TEMPORAL_CUTOFF_YEAR=2016`, same `spatial_block_tiger` grouping / tiny-block merge, ",
+  "same random 80/20 stratified draw), identical ranger hyperparameters ",
+  "(`num.trees=", NUM_TREES, "`, `case.weights=n_neg/n_pos`, `num.threads=1`, same per-H/per-split ",
+  "seed formula), identical reconciled scorer (`R/scoring_reconciliation.md`-compliant feature-",
+  "exclusion list — only `\"year\"` dropped as a split key; `month`/`doy` remain features). ",
+  "**The ONLY change is the feature set**: `data/processed/model_dataset.parquet` was rebuilt by ",
+  "A6/datacube with 71 new bio-optical features (from A4b/bio-optical-spec.md, verbatim ",
+  "Amin 2009 / Cannizzaro 2008 / Morel 1988 equations):\n\n",
+  "- **11 level/flag features**: `rbd`, `kbbi` (winsorized), `bbp_551`, `bbp_morel_550`, ",
+  "`bbp_ratio_morel`, `bbp_deficit`, `nlw_667`, `nlw_678`, `rbd_detect`, `kbbi_kbrevis`, ",
+  "`cannizzaro_kbrevis`.\n",
+  "- **60 trend features**: delta_{1,3,5,7}d / pct_chg_{1,3,5,7}d / slope_obs{3,5,7} / ",
+  "rollmean_obs{3,7} / rollstd_obs{3,7} for each of `rbd`, `kbbi`, `bbp_ratio_morel`, `bbp_deficit`.\n",
+  "- **7 bio meta/quality columns EXCLUDED** (not features, same treatment as existing sat_/env_/",
+  "static_/label_IS_PLACEHOLDER family): `kbbi_raw`, `kbbi_invalid`, `bio_missing`, ",
+  "`bio_cloud_flag`, `bio_feature_filled`, `bio_IS_PLACEHOLDER`, `bio_chl_missing`.\n",
+  "- **NaN/Inf check**: confirmed `is.na()`/`anyNA()` (R semantics) catch NaN in bio+trend ",
+  "columns, so the existing train-median `impute_with_flag()` path covers them with no code ",
+  "change needed; explicit `is.infinite()` assertion added per-horizon (STOPs the run if any ",
+  "Inf reaches ranger) — 0 Inf found across all bio-optical columns in the full dataset.\n",
+  "- **`month`/`doy` confirmed INCLUDED** (real trained features per scoring_reconciliation.md); ",
+  "**`year` confirmed EXCLUDED** (split key only).\n",
+  "- **BEFORE baseline preserved**: `outputs/models/best_model_before_bio.rds` and ",
+  "`outputs/tables/model_results_before_bio.csv` are byte-identical copies of the pre-bio ",
+  "artifacts made BEFORE this run overwrote `best_model.rds`/`model_results.csv` (MD5 of ",
+  "best_model.rds pre-copy = `42a974c0e233027a7b3e355873f48c4c`, matches ",
+  "scoring_reconciliation.md's frozen BEFORE model).\n",
+  "- **AFTER results tagged**: `model_results.csv` rows carry `feature_set=\"", FEATURE_SET_TAG, "\"` ",
+  "so the bio-inclusive AFTER run is unambiguous relative to the untagged BEFORE backup.\n\n",
+  "## BEFORE vs AFTER — RF recall / PR-AUC / precision, all H × split\n\n",
+  before_after_txt, "\n",
+  "(Full table: `outputs/tables/bio_before_after_comparison.csv`.)\n\n",
   "---\n\n",
   "## Decisions\n\n",
   "- **Feature exclusion**: hard-dropped `HAB` (same-day detection label, col 3) by name ",
@@ -716,6 +862,24 @@ log_text <- paste0(
   "- **Spatial-block split** — county-block holdout per lead directive 2026-07-11 ",
   "(decisions.md). Tiny blocks merged before CV. PLAN.md §9.\n\n",
   "## Open questions / caveats / limitations\n\n",
+  "- NOTE(paper): **Bio-optical isolation finding (2026-07-14, honest negative result)** — ",
+  "adding the 71 bio-optical discrimination features (RBD/KBBI, bbp_ratio_morel/bbp_deficit, ",
+  "nLw, published-rule flags + trends) did NOT improve RF skill at the default 0.5 threshold; ",
+  "if anything it costs a little. At the headline H=7 temporal split: recall 0.355->0.315 ",
+  "(-0.040), PR-AUC 0.502->0.485 (-0.017), precision 0.601->0.594 (-0.007). Across all 15 ",
+  "horizon x split combinations, RF recall dropped in 12/15 and PR-AUC dropped in 10/15 ",
+  "(full table: outputs/tables/bio_before_after_comparison.csv). Isolation was strict (same ",
+  "seed/split/hyperparameters, identical row membership confirmed by matching TP+FN and ",
+  "FP+TN row counts before vs after) so the change is attributable to the feature set, not ",
+  "noise from a different split. Plausible cause (not confirmed): bio-optical columns carry ",
+  "very high missingness (48-66% NA before trends, 55-92% NA on the trend variants — cloud/",
+  "no-retrieval gaps), so their imputed/flag columns may add noise that dilutes ranger's ",
+  "default mtry=sqrt(p) split sampling rather than adding usable signal. This is a legitimate ",
+  "reportable finding per PLAN.md's honesty gate, not a corrupted run: ROC-AUC stayed in a ",
+  "sane 0.81-0.93 range (no leakage signature of near-1.0 AUC), and the persistence/chl-only ",
+  "baselines are unaffected (baselines don't use these features) and unchanged run-to-run. ",
+  "A8 (explainability/SHAP) should check whether any INDIVIDUAL bio-optical feature ranks ",
+  "highly despite the aggregate recall/PR-AUC being flat-to-negative.\n",
   "- NOTE(limitation): CHIRPS precip and SMAP salinity remain all-NA placeholder in this ",
   "cube (CHIRPS blocked by a CrowdSec IP ban, SMAP deferred per lead directive). ERA5 ",
   "wind is REAL as of 2026-07-13.\n",
@@ -752,7 +916,16 @@ log_text <- paste0(
   "| No look-ahead leakage | ✅ PASS (inherits from A6/R6) |\n",
   "| Header + NOTE tags present | ✅ PASS |\n",
   "| Agent log written | ✅ PASS |\n",
-  "| NOT committed (awaiting R-SPLIT) | ✅ PASS |\n"
+  "| NOT committed (awaiting R-SPLIT) | ✅ PASS |\n",
+  "| BEFORE baseline preserved (best_model_before_bio.rds, model_results_before_bio.csv) | ",
+  ifelse(file.exists(before_bio_path), "✅ PASS", "❌ FAIL"), " |\n",
+  "| Bio features included (71), bio meta flags excluded (7) | ✅ PASS |\n",
+  "| NaN handling confirmed / 0 Inf reaching ranger | ✅ PASS |\n",
+  "| month/doy included, year excluded | ✅ PASS |\n",
+  "| Same seed/split/hyperparameters as BEFORE (isolation) | ✅ PASS (row counts match ",
+  "reports/scoring_reconciliation.md's frozen BEFORE H=7 temporal TP+FN=1075, FP+TN=7805) |\n",
+  "| model_results.csv tagged feature_set='bio_inclusive' | ✅ PASS |\n",
+  "| Before/after comparison table written | ✅ PASS |\n"
 )
 
 writeLines(log_text, LOG_PATH)

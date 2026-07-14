@@ -134,6 +134,84 @@
 }
 
 % ============================================================
+% BIO-OPTICAL SPECIES DISCRIMINATION (K. brevis) — added by A-DOC 2026-07-14
+% Source: reports/bio_optical_spec.md (lead's verified exact-equation extraction,
+% read directly from the 3 source PDFs in paper/refs_pdfs/). Corrects the Amin (2009)
+% venue miscitation previously in paper/design_rationale.md line ~143.
+% ============================================================
+
+@article{amin2009rbd,
+  author  = {Amin, Ruhul and Zhou, Jing and Gilerson, Alexander and Gross, Barry and
+             Moshary, Fred and Ahmed, Samir},
+  title   = {Novel Optical Techniques for Detecting and Classifying Toxic Dinoflagellate
+             {Karenia brevis} Blooms Using Satellite Imagery},
+  journal = {Optics Express},
+  volume  = {17},
+  number  = {11},
+  pages   = {9126--9144},
+  year    = {2009},
+  doi     = {10.1364/OE.17.009126},
+  note    = {VERIFIED: DOI resolves (Optical Society / Optica Publishing Group). Defines
+             Red Band Difference (RBD, Eq. 19, p.9133) and K. brevis Bloom Index (KBBI,
+             Eq. 20, p.9134) on MODIS bands 13 (667 nm) / 14 (678 nm), computed on
+             normalized water-leaving radiance nLw = Rrs x F0 (NOT on Rrs directly; see
+             Sec. 3.1 end, p.9133). Thresholds: RBD > 0.15 W m^-2 um^-1 sr^-1 (detection,
+             Abstract p.9126); RBD > 0.15 AND KBBI > 0.3 x RBD (K. brevis classification,
+             Sec. 4.1 p.9135). CORRECTION 2026-07-14 (A-DOC): paper/design_rationale.md
+             line ~143 previously miscited this as "Continental Shelf Research" (confused
+             with Cannizzaro 2008, cited below) -- corrected everywhere in paper/ and
+             reports/. See reports/bio_optical_spec.md Sec. 1 (lead-verified, page/eq
+             numbers transcribed directly from the source PDF) and
+             R/04b_bio_optical_features.R (implementer) for the applied equations.}
+}
+
+@article{cannizzaro2008bbp,
+  author  = {Cannizzaro, Jennifer P. and Carder, Kendall L. and Chen, F. Robert and
+             Heil, Cynthia A. and Vargo, Gabriel A.},
+  title   = {A Novel Technique for Detection of the Toxic Dinoflagellate, {Karenia brevis},
+             in the {G}ulf of {M}exico from Remotely Sensed Ocean Color Data},
+  journal = {Continental Shelf Research},
+  volume  = {28},
+  number  = {1},
+  pages   = {137--158},
+  year    = {2008},
+  doi     = {10.1016/j.csr.2004.04.007},
+  note    = {VERIFIED: DOI resolves (Elsevier). Defines the low-backscatter-per-chlorophyll
+             K. brevis discrimination rule (Sec. 6.1, p.150, Fig. 9C): a cell/pixel is
+             flagged K. brevis-positive when BOTH (1) Chl > 1.5 mg m^-3 AND (2) bbp(550)
+             falls below the Morel (1988) Case-1 expected curve (\cite{morel1988case1}).
+             bbp(551) is computed from the MODIS IOP L3m power law bbp(lambda) =
+             bbp(443)*(443/lambda)^bbp_s (Eq. 14, p.146). Physical basis (p.153):
+             K. brevis bbp/bp ratio < 1.0% vs > 1.0% for high-chl non-K.brevis (diatom)
+             waters. See reports/bio_optical_spec.md Sec. 3 (lead-verified page/eq numbers)
+             and R/04b_bio_optical_features.R (implementer).}
+}
+
+@article{morel1988case1,
+  author  = {Morel, Andr{\'e}},
+  title   = {Optical Modeling of the Upper Ocean in Relation to Its Biogenous Matter
+             Content ({C}ase {I} Waters)},
+  journal = {Journal of Geophysical Research},
+  volume  = {93},
+  number  = {C9},
+  pages   = {10749--10768},
+  year    = {1988},
+  doi     = {10.1029/JC093iC09p10749},
+  note    = {VERIFIED: DOI resolves (AGU/Wiley). Provides the Case-1 water particulate
+             backscattering reference curve used as the Cannizzaro (2008) rule-2 baseline:
+             bbp(550) = 0.30*C^0.62 (Eq. 18, p.10759, r^2=0.90, n=506; C = chlorophyll,
+             mg m^-3, valid ~0.03-30 mg m^-3), combined with the particulate backscattering
+             fraction term (unnumbered eq., p.10760) into
+             bbp_Morel(550;C) = 0.30*C^0.62 * [0.002 + 0.02*(0.5 - 0.25*log10(C))].
+             Cross-checked byte-identical to Amin (2009) Eq. 16, which miscites its own
+             origin to Morel & Maritorena (2001) rather than this 1988 paper -- two
+             independent published derivations converge on the same expression, raising
+             confidence in the transcription (see reports/bio_optical_spec.md Sec. 2).
+             R/04b_bio_optical_features.R implements this as the `bbp_morel_550` reference
+             curve.}
+}
+
+% ============================================================
 % METHODOLOGY PACKAGES
 % ============================================================
 

@@ -444,6 +444,97 @@ _Static geographic datasets for map outputs. Added 2026-07-11 from PDF harvest._
 - **Agent/file:** `R/00_config.R`, `config.yaml`.
 - **NOTE(paper) tag:** `R/00_config.R` (harvested 2026-07-11).
 
+### Bio-optical species-discrimination features (RBD/KBBI + Cannizzaro bbp/chl)
+_Added by A-DOC 2026-07-14 from `reports/bio_optical_spec.md` (lead's verified exact-equation
+extraction, read directly from the 3 source PDFs). Implementer file: `R/04b_bio_optical_features.R`
+(A4b, additive-only join onto `satellite_features.parquet`; does not modify M1/M2 outputs).
+These are the two features that motivate §7.4's false-positive-concentration finding —
+species-level discrimination the base MODIS ocean-color features (chl-a, nFLH) cannot provide,
+since both fire on any high-biomass water regardless of the causative phytoplankton species._
+
+#### (a) Red Band Difference (RBD) & K. brevis Bloom Index (KBBI) — Amin et al. (2009)
+- **Description:** Amin et al. define two species-discrimination scores from MODIS-Aqua's two
+  red bands: **Band 13 (667 nm)** and **Band 14 (678 nm)**. Both scores are computed on
+  **normalized water-leaving radiance nLw**, not on remote-sensing reflectance Rrs directly —
+  the conversion is `nLw(λ) = Rrs(λ) × F0(λ)` (spec Eq., §1 "nLw conversion"), where F0(λ) is
+  the band-averaged extraterrestrial solar irradiance for MODIS-Aqua bands 13/14, a **NASA
+  sensor constant** (not a coefficient from the paper). The units must resolve so that
+  Rrs[sr⁻¹] × F0 yields nLw in W m⁻² µm⁻¹ sr⁻¹ (the unit the RBD threshold is stated in) — this
+  requires F0 expressed in W m⁻² µm⁻¹ (order ~1.5×10³), not the ~10× smaller mW cm⁻² µm⁻¹
+  convention. **F0 resolved (2026-07-14):** F0(667) = 1522.491 W m⁻² µm⁻¹, F0(678) =
+  1480.511 W m⁻² µm⁻¹, from NASA OBPG's Spectral Bandpass Integration (Thuillier reference
+  solar spectrum convolved with the MODIS-Aqua RSR), logged with full citation chain in
+  `reports/agent_logs/sat-features.md` §"F0 — authoritative source". Unit sanity-check
+  (RBD values land near the 0.15 threshold scale, not 10× off in either direction) **PASSED**.
+  - RBD (spec Eq. 19, p.9133): `RBD = nLw(678) − nLw(667)` [W m⁻² µm⁻¹ sr⁻¹]
+  - KBBI (spec Eq. 20, p.9134): `KBBI = (nLw(678) − nLw(667)) / (nLw(678) + nLw(667))`
+    (numerator = RBD; denominator = nLw(678) + nLw(667))
+  - Thresholds (spec §1 "Thresholds"): detection `RBD > 0.15`; K. brevis classification
+    `RBD > 0.15 AND KBBI > 0.3 × RBD`.
+  - Feature outputs: continuous `rbd`, `kbbi` (primary model features) plus boolean companions
+    `rbd_detect` (RBD>0.15) and `kbbi_kbrevis` (RBD>0.15 & KBBI>0.3·RBD).
+- **Rationale (motivating hypothesis — tested, and NOT confirmed in aggregate; see A10 result
+  below):** Motivated by §7.4's finding that false positives concentrate in high-chlorophyll/
+  high-nFLH water — RBD/KBBI are published, independently-derived species-discrimination signals
+  (spectral shape between the two red bands) that are not redundant with chlorophyll or
+  fluorescence level, and were hypothesized to reduce the benign-bloom false-positive rate.
+  A10 measured a small, correctly-targeted reduction in that specific error but a net-negative
+  aggregate effect — see below.
+- **Citation:** `\cite{amin2009rbd}` — Amin, Zhou, Gilerson, Gross, Moshary, Ahmed (2009),
+  *Optics Express* 17(11):9126–9144, doi:10.1364/OE.17.009126. **Note:** `paper/design_rationale.md`
+  previously miscited this as *Continental Shelf Research* (confused with Cannizzaro 2008,
+  below) — corrected 2026-07-14 (A-DOC), see that file's §6 and §9.
+- **Agent/file:** spec — `reports/bio_optical_spec.md` §1 (lead, 2026-07-14, verified against
+  the source PDF, page/equation numbers cited); implementer — `R/04b_bio_optical_features.R`;
+  F0 constant sourcing — `reports/agent_logs/sat-features.md` (resolved, Gate 2 PASS).
+- **Use in paper:** Methods (bio-optical feature engineering); Results/Discussion §7.4 — see
+  "Bio-optical features — measured model impact (A10)" below for the actual before/after
+  numbers (a legitimate negative aggregate result with a small targeted-FP-reduction nuance).
+
+#### (b) Low-bbp-per-chlorophyll K. brevis discrimination rule — Cannizzaro et al. (2008)
+- **Description:** Cannizzaro et al. define a second, independent species-discrimination rule
+  based on particulate backscattering relative to chlorophyll. A cell/pixel is flagged
+  K. brevis-positive when **both** (spec §3, "THE classification rule", verbatim from the
+  paper's §6.1, p.150, Fig. 9C): **(1) Chl > 1.5 mg m⁻³**, and **(2) bbp(550) < bbp_Morel(550;Chl)**
+  — i.e. observed backscatter falls *below* the Morel (1988) Case-1 expected curve (see (c)
+  below). Physical basis (p.153): K. brevis particulate backscattering ratio bbp/bp is
+  characteristically **< 1.0%**, vs. **> 1.0%** for high-chlorophyll non-K.-brevis (e.g. diatom)
+  water — "anomalously low backscatter per unit chlorophyll."
+  - bbp(551) is derived from the MODIS IOP L3m power law (spec Eq. 14, p.146):
+    `bbp(551) = bbp_443 × (443/551)^(bbp_s)`, using `IOP.bbp_443` and `IOP.bbp_s` from the
+    datacube (551 nm is MODIS's green band, treated ≡ Cannizzaro's "bbp(550)").
+  - Feature outputs: `bbp_551` (observed), `bbp_morel_550` (expected, from (c)),
+    `bbp_ratio_morel = bbp_551/bbp_morel_550` (primary continuous score — a smooth
+    discrimination signal, <1 ⇒ K.-brevis-like), `bbp_deficit = bbp_morel_550 − bbp_551`
+    (additive alternative), and the boolean `cannizzaro_kbrevis` (the paper's exact published
+    rule). Chl input = existing `chlor_a` (MODIS `CHL.chlor_a`). NA (not zero-filled) where
+    Chl or bbp inputs are missing (cloud/no retrieval), following the project's existing
+    satellite-features missingness convention.
+- **Citation:** `\cite{cannizzaro2008bbp}` — Cannizzaro, Carder, Chen, Heil, Vargo (2008),
+  *Continental Shelf Research* 28(1):137–158, doi:10.1016/j.csr.2004.04.007.
+- **Agent/file:** spec — `reports/bio_optical_spec.md` §3; implementer —
+  `R/04b_bio_optical_features.R`.
+- **Use in paper:** Methods (bio-optical feature engineering, second independent
+  discrimination signal); Results/Discussion §7.4 — see the measured A10 outcome above.
+
+#### (c) Morel (1988) Case-1 backscatter reference curve
+- **Description:** Provides the expected particulate backscatter at 550 nm as a function of
+  chlorophyll for Case-1 (open, phytoplankton-dominated) water — the baseline the Cannizzaro
+  rule tests observed backscatter *against*: `bbp_Morel(550;C) = 0.30·C^0.62 · [0.002 +
+  0.02·(0.5 − 0.25·log₁₀C)]` (spec §2, combining Eq. 18, p.10759, r²=0.90, n=506, with the
+  unnumbered particulate-backscattering-fraction equation, p.10760; C = chlorophyll, mg m⁻³,
+  valid ~0.03–30 mg m⁻³). **Cross-check:** this expression is byte-identical to Amin (2009)'s
+  own Eq. 16, even though Amin miscites its origin to Morel & Maritorena (2001) rather than
+  this 1988 paper — two independently-published derivations converge on the same formula,
+  which is why the lead's transcription in `reports/bio_optical_spec.md` is treated as
+  high-confidence.
+- **Citation:** `\cite{morel1988case1}` — Morel (1988), *J. Geophys. Res.* 93(C9):10749–10768,
+  doi:10.1029/JC093iC09p10749.
+- **Agent/file:** spec — `reports/bio_optical_spec.md` §2; implementer —
+  `R/04b_bio_optical_features.R` (`bbp_morel_550` column).
+- **Use in paper:** Methods (reference curve underlying the Cannizzaro rule); cite alongside
+  (b) whenever `bbp_ratio_morel`/`bbp_deficit`/`cannizzaro_kbrevis` are discussed.
+
 ---
 
 ## Modeling
@@ -579,6 +670,58 @@ Source: `reports/agent_logs/modeling.md` (2026-07-11).
 
 _All other result tables/figures pending A8 (SHAP/explainability), A9 (GIS maps), A10 (validation), A11 (transformer)._
 
+### Bio-optical features — measured model impact (A10, 2026-07-14) — a legitimate NEGATIVE result
+- **Status: MEASURED.** A10 scored the two frozen models (`best_model_before_bio.rds` vs.
+  `best_model.rds`, bit-exact, same 8,880 H=7-temporal test rows, `identical(test_idx)`=TRUE)
+  and found adding RBD/KBBI (Amin 2009) + the Cannizzaro (2008) bbp-vs-Morel score **did not
+  improve, and mildly hurt, aggregate forecast skill** — while producing a small, correctly
+  *targeted* reduction in the high-chlorophyll false positives they were designed to fix.
+  Both findings are first-class; report the negative plainly and the mechanistic nuance
+  alongside it, not instead of it. Source: `reports/agent_logs/validation.md` §"Bio-optical
+  feature validation"; `outputs/tables/bio_validation_before_after.csv`;
+  `outputs/tables/bio_fp_concentration_before_after.csv`.
+
+  **Headline — H=7 temporal, BEFORE (pre-bio, wind-only) → AFTER (bio-inclusive):**
+
+  | Metric | Before | After | Δ |
+  |---|---|---|---|
+  | PR-AUC | 0.5022 | 0.4849 | **−0.0173** |
+  | precision @ recall=0.80 | 0.2759 | 0.2796 | +0.0037 (~flat) |
+  | recall @ 0.5 | 0.3553 | 0.3153 | **−0.0400** |
+  | precision @ 0.5 | 0.6006 | 0.5937 | −0.0069 |
+  | TP / FP (@0.5) | 382 / 254 | 339 / 232 | TP −43, FP −22 |
+
+  **Grid (all 15 horizon×split combos, `bio_validation_before_after.csv`):** PR-AUC down in
+  10/15, up in 5/15; recall@0.5 down in 12/15; precision@recall-0.80 is a wash (down 7 / up 7
+  / flat 1) — the negative is concentrated at the default 0.5 threshold, not at the
+  recall-0.80 operating point.
+
+  **Mechanistic nuance — the features DID cut their targeted false positives** (observed/
+  clear-sky rows only; chl observed in 30.2% of test rows, nFLH in 25.2%):
+  - Top-chl-quartile (Q4) FP count: **39 → 31**; every net FP removed among observed-chl rows
+    came from Q4 (Q1–Q3 unchanged at 4/2/8). Top-chl-Q4 share of all FPs: **73.58% → 68.89%**.
+  - Joint high-chl-Q4 & high-nFLH-Q4 FP rate: **12.41% → 10.95%** (−1.46pp, ~12% relative).
+  - **But** the joint FP-**concentration ratio** (both-Q4 vs. neither-Q4) did **not** fall —
+    it **rose 19.09× → 22.35×**, because clean-water (neither-quartile) FPs fell even faster
+    (0.65% → 0.49%) than the targeted high-chl/high-nFLH ones.
+  - The targeted FP cut (−22 total FP) is outweighed by a larger true-positive loss (−43 TP)
+    → net recall and PR-AUC fall despite the correctly-targeted error-shape change.
+
+  **Honest verdict (verbatim intent, do not soften):** the published K. brevis discrimination
+  equations (implemented from exact equations, with authoritative NASA F0) did **not** improve
+  aggregate RF forecast skill on this cube — a legitimate negative result — and mildly hurt it.
+  They shaved the right (high-chlorophyll) errors but too few of them to overcome the
+  accompanying true-positive cost, and did not reduce the *relative* FP concentration in
+  high-chl/high-nFLH water. Effect is real but weak (single/double-digit FP counts),
+  clear-sky-only. **"Associated with," never "causes"** — this is a correlational error-shape
+  change on a frozen holdout, not a demonstrated causal improvement in species discrimination.
+- **Agent/file:** A10 (validation); `reports/agent_logs/validation.md`;
+  `outputs/tables/bio_validation_before_after.csv`;
+  `outputs/tables/bio_fp_concentration_before_after.csv`;
+  `outputs/tables/error_analysis.csv` (8 appended `bio_*` rows).
+- **Use in paper:** Results §7.4 (supersedes the earlier FP-gap motivation with the measured
+  outcome) and Discussion/Limitations (negative result + targeted-but-insufficient nuance).
+
 ---
 
 ## Limitations
@@ -686,3 +829,31 @@ _All other result tables/figures pending A8 (SHAP/explainability), A9 (GIS maps)
   Flag as "lower confidence due to sparse training sample" in all results tables and figures.
   Primary statistical power is at H=7 (23,751 rows) and H=14 (23,889 rows). Source:
   `reports/agent_logs/modeling.md` NOTE(limitation) (2026-07-11).
+
+- **Bio-optical features are published discrimination equations applied off-label to a new
+  sensor/product tier, not a validated sub-cell K.-brevis identification — and measured
+  empirically NOT to improve forecast skill.** RBD, KBBI, and the Cannizzaro low-bbp-per-chl
+  rule are *K. brevis*-discrimination equations from the published literature (Amin 2009;
+  Cannizzaro 2008), derived and validated by those authors against in-situ K. brevis cell
+  counts under their own instrument/processing conditions. Applying them here to MODIS-Aqua
+  L3m 10 km-aggregated cell-day means is a *reuse* of published equations, not an independent
+  re-validation of species discrimination — their output is **associated with** (not proof of)
+  K.-brevis-specific optical signal at this project's spatial/temporal aggregation. **A10's
+  measurement (2026-07-14) confirms this caution was warranted**: at H=7 temporal the features
+  produced a small, correctly-targeted cut in high-chlorophyll false positives (top-chl-Q4 FP
+  39→31) but a net-negative aggregate effect (PR-AUC 0.5022→0.4849, recall@0.5 0.3553→0.3153)
+  because the FP reduction was outweighed by a larger true-positive loss — see "Bio-optical
+  features — measured model impact (A10)" above for full numbers. No causal or "validated
+  sub-cell forecast" claim should be made from these features; state explicitly wherever used.
+  Source: `reports/bio_optical_spec.md` (2026-07-14); `reports/agent_logs/validation.md`
+  (2026-07-14); PLAN.md §1 guardrails (no causal overclaiming).
+
+- **F0 (solar irradiance constant) — resolved, sanity-checked.** RBD/KBBI require the
+  MODIS-Aqua band-13/14 band-averaged extraterrestrial solar irradiance F0, a NASA sensor
+  constant. **Resolved 2026-07-14**: F0(667nm, Band 13) = 1522.491 W m⁻² µm⁻¹, F0(678nm,
+  Band 14) = 1480.511 W m⁻² µm⁻¹, obtained from NASA OBPG's Spectral Bandpass Integration
+  (Thuillier reference solar spectrum convolved with the MODIS-Aqua relative spectral
+  response), full citation chain in `reports/agent_logs/sat-features.md` §"F0 — authoritative
+  source" (Gate 2, PASS). Unit sanity-check (computed RBD values land near the 0.15 threshold
+  scale, not 10× off) **PASSED** — reported RBD/KBBI numeric values in A10's validation
+  (above) are on the correct unit scale.
