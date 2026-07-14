@@ -9,9 +9,12 @@ Transformer** compared head-to-head. This is genuine *forecasting* — the label
 status of a cell at day **T+H**, predicted from features observed **through day T** (no
 look-ahead leakage).
 
-> **Governing documents:** [`PLAN.md`](PLAN.md) is the source of truth; [`CLAUDE.md`](CLAUDE.md)
-> is the repo operating manual. Read both before contributing. On any conflict, PLAN.md wins.
-
+> > **Governing documents — three files, three functions:**
+> [`CLAUDE.md`](CLAUDE.md) — *how* we operate (auto-loaded by Claude Code).
+> [`PLAN.md`](PLAN.md) — *the spec*: pinned decisions, feature spec, evaluation protocol.
+> [`PROJECT.md`](PROJECT.md) — *the program*: current queue, scoreboard, pivot triggers.
+> Read all three. Precedence: CLAUDE.md on operating questions, PROJECT.md on what to build
+> next, PLAN.md on what was decided and why.
 ## Key decisions (PLAN.md §2)
 
 | Item | Value |
@@ -73,5 +76,13 @@ clip to box → aggregate to grid → delete raw), resumable by date.
 
 ## Status
 
-Scaffolding committed. Milestones: **M1** Stage-1 RF forecast → **M2** GIS risk maps +
-intra-cell drill-down → **M3** Stage-2 transformer. See `PLAN.md` §3.
+**M1–M3 complete.** Stage-1 RF validated across random/temporal/spatial splits vs persistence and
+chlorophyll-only baselines (`outputs/tables/model_results.csv`); GIS risk maps and intra-cell
+drill-down exported; Stage-2 transformer trained and compared head-to-head.
+
+Three reportable negative results: the transformer does not beat the RF on PR-AUC; ERA5 wind
+barely moves metrics; published bio-optical discrimination features do not net-improve skill.
+
+**Current work:** tree-side improvement program — see [`PROJECT.md`](PROJECT.md). Note `PROJECT.md`
+§2 records four corrections to how the results above should be read; do not cite the numbers
+without it.

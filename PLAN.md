@@ -1,8 +1,18 @@
 # BloomGuard GIS — Project Plan (`PLAN.md`)
 
-> **This is the operating document for the Claude Code agent team.**
-> The team lead and every teammate must read this file in full before taking any action.
-> When a decision here conflicts with an instinct, this file wins. When this file is silent, ask the lead — do not improvise on science, data, or tooling.
+> **This file is the SPEC. It is not the current work plan.**
+> Read it in full before taking any action — its pinned decisions (§2), feature spec (§8),
+> evaluation protocol (§9), and guardrails (§1) are **live and binding**. Do not relitigate §2;
+> changing a pinned decision is an author call, not an agent one.
+>
+> **What has changed since this file was written:**
+> - §3 milestones M1–M3 are **complete**. §11–§12 are **complete**.
+> - §6 per-agent model tags are **superseded by `CLAUDE.md`**.
+> - Current work — the queue, the scoreboard, the pivot triggers, and four corrections to
+>   results this file's era produced — lives in **`PROJECT.md`**.
+>
+> **Precedence:** `CLAUDE.md` on how to operate · `PROJECT.md` on what to build next ·
+> this file on what was decided and why.
 
 **Project:** BloomGuard GIS — **forecasting** *Karenia brevis* harmful algal bloom risk _H_ days ahead from the **levels and short-term trends** of satellite/environmental conditions (e.g., a ~10% day-over-day rise in chlorophyll-a), aggregated onto a coastal grid and exported as GIS-ready risk layers. Two modeling stages: **Random Forest first, transformer second.**
 
