@@ -23,8 +23,10 @@ answers "what are we doing now and when do we stop." If you find yourself wantin
 
 Repo state as pushed: **post-wind, pre-bio-optical.** `outputs/tables/model_results.csv` is the
 authoritative scoring output. The bio-optical branch (`feat/bio-optical-discrimination-features`,
-commit `21320f7`) is **local-only and not on the remote** — the push failed on stale auth and was
-never retried. Nothing in the public repo reflects that work.
+commit `21320f7`) has been **merged into `main` and pushed to the remote**. Bio-optical was a
+documented negative result and **was not adopted**, so the canonical `model_results.csv` still
+reports the pre-bio model we ship; the bio-inclusive variant is preserved as
+`model_results_bio_inclusive.csv`. The public repo now reflects that work.
 
 `data/processed/model_dataset.parquet` — 65,939 × 114, final.
 
@@ -163,8 +165,8 @@ the paper.
 | **P0-A** | **Add an H-day embargo** around the temporal boundary: no training row's label date may fall in the test feature-date range. Re-run A7. | `modeling` (fable-5), gate R-SPLIT | Every baseline number is measured without it. |
 | **P0-B** | **Add a spatial buffer** to the block holdout: drop train cells within ≥1 neighbourhood radius of any test cell. Report how many rows this costs. | `modeling`, gate R-SPLIT | **E-01 cannot run without it.** |
 | **P0-C** | **Block-bootstrap CIs on the frozen baseline** (§5), n=1000, blocks = contiguous time segments. | `validation` (opus-4-8) | Without them no Δ in §4 is interpretable. |
-| **P0-D** | **Delete or regenerate `head_to_head_comparison.csv`.** Two RF tables that disagree is how D4 happened. | `modeling` | Stale numbers get cited. |
-| **P0-E** | **Push + merge the bio-optical branch** (`gh auth login`, then push `21320f7`). | lead | A documented negative result exists only on one laptop. |
+| **P0-D** ✅ **DONE** | **Deleted `head_to_head_comparison.csv`** (stale pre-wind RF numbers that disagreed with `model_results.csv`). | `modeling` | Stale numbers get cited. |
+| **P0-E** ✅ **DONE** | **Merged the bio-optical branch into `main` and pushed to the remote** (`21320f7`). | lead | A documented negative result exists only on one laptop. |
 | **P0-F** | **Fix `IS_PLACEHOLDER_ROW` AND→OR** at `R/05_environmental_features.R:773`. Re-run A5→A6. No retrain. | `env-features` | Row-level honesty flag silently zeroed once wind went real; precip/salinity are still placeholders. |
 | **P0-G** | **`renv::record("ecmwfr")`** — narrow only, never a blind snapshot. | lead | Reproducibility. |
 | **P0-H** | **Compute `prec_at_recall80` for the transformer.** It is empty for all 15 transformer rows. | `transformer` (fable-5) | It is the only metric that compares RF vs transformer at a matched operating point. Without it §2.3 cannot be settled. |
@@ -378,6 +380,8 @@ A-DOC (opus-4-8) appends one row per experiment. Never rewrite history; supersed
 | — | **BASELINE (RF, pre-embargo)** | frozen | 0.5022 | — | *P0-C* | 0.4587 | — | ✓ (0.276 vs 0.215) | 19× | — | conditional |
 | P0-A | Temporal embargo | not started | | | | | | | | | |
 | P0-B | Spatial buffer | not started | | | | | | | | | |
+| P0-D | Delete stale head_to_head | ✅ DONE | | | | | | | | | |
+| P0-E | Merge + push bio-optical branch | ✅ DONE | | | | | | | | | |
 | P0-H | Transformer p@r80 | not started | | | | | | | | | |
 | P0-I | Train-side importance | not started | | | | | | | | | |
 | P0-J | Sampling-regime test | not started | | | | | | | | | |
