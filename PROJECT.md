@@ -369,10 +369,30 @@ is unambiguous. **Do not constrain SST** — the chl/SST relationship for *K. br
 monotone in an obvious direction, and a wrong constraint is worse than none. A NULL that costs
 nothing and improves defensibility is worth keeping if PR-AUC is flat within CI; say so.
 
-### E-06 · Ordinal severity reframe `[AUTHOR DECISION — biggest swing]`
+### E-06 · Ordinal severity reframe `[DONE — Stage 1; author-authorized 2026-07]`
 FWC order-of-magnitude categories → denser gradient, higher effective-positive count, alignment
 with Medina 2024. Threshold back to binary at eval for comparability. **This is a label change,
-not a tree tweak.** It re-opens the evaluation story. Agents may not initiate it.
+not a tree tweak.** It re-opened the evaluation story.
+
+**RESULT (Stage 1) — binary NULL (ordered forest) / NEGATIVE (multiclass). See
+`reports/results/E-06_ordinal_severity.md`.** 5-class FWC target (binary = class≥3, validated 100%
+against `HAB_H`; raw `max_count` carried through — **target now has two forms, ordinal primary +
+binary derived; A-DOC note below**). Adopted features, repaired splits.
+- **Primary verdict (threshold-back binary PR-AUC Δ vs frozen baseline, 30-day block bootstrap):**
+  ordered-forest P(class≥3) is NULL at every horizon (H=7 −0.0006 [−0.005, +0.003]) — structural, it
+  reproduces the binary model; multiclass P(3)+P(4) is NEGATIVE at every horizon (H=7 −0.0197 [−0.036,
+  −0.002]) — thresholding back from a 5-class objective costs binary skill. **The reframe does not
+  lift the binary forecast — fifth negative, bounding the problem at label density.** No leakage
+  SUSPECT.
+- **Mechanism:** middle classes (1 "very low", 2 "low") are essentially unlearnable (recall ~0 at
+  H=7); only background and the old-positive region carry signal, so the extra gradient is where the
+  features cannot separate.
+- **But a Path-B deliverable exists:** the ordinal model has real severity skill — QWK 0.52 at H=7
+  temporal (0.66 at H=1), and H=7 category accuracy 75.8% (Bar B; Medina 2024 report 73% at 1-week —
+  **comparable target, different splits/region/classes, NOT "beat Medina"; no true 4-week arm**).
+- **STOP #2 (author decisions, not auto):** GBDT with a custom ordinal objective that optimizes the
+  class-3 boundary (the one path that could convert the multiclass NEGATIVE into a binary gain);
+  threshold-lowering to 50k; weak-label/sampling-density pretraining.
 
 ### Deferred
 - **Supervision fix** (restrict training to well-sampled periods; add a sampling-density feature so
@@ -455,6 +475,30 @@ no comparable concentration — a clean control.
 **Reference baselines, temporal PR-AUC:** persistence 0.6158 / 0.5827 / 0.5339 / 0.4503 / 0.3196;
 chl-only 0.2139 / 0.2282 / 0.1918 / 0.1417 / 0.1220 (H=1/3/5/7/14).
 
+**Ordinal severity metrics (E-06, ordered forest, temporal split — the target now has two forms).**
+`outputs/tables/e06_metrics.csv`. These are new because the target is new; the binary numbers above
+remain the headline forecast metric.
+
+| H | QWK | category accuracy | binary Δ vs baseline (ordered / multiclass) |
+|---|---|---|---|
+| 1 | 0.662 | 0.736 | −0.0025 null / −0.0330 neg |
+| 3 | 0.658 | 0.698 | +0.0022 null / −0.0333 neg |
+| 5 | 0.645 | 0.731 | −0.0023 null / −0.0503 neg |
+| **7** | **0.517** | **0.758** | **−0.0006 null / −0.0197 neg** |
+| 14 | 0.418 | 0.763 | +0.0041 null / −0.0278 neg |
+
+Bar B: H=7 category accuracy 0.758 vs Medina 2024's 73% at 1-week — **comparable target, different
+splits/region/classes; NOT a head-to-head win, and H=14 is not a 4-week arm.** Per-class: the middle
+classes (1–2) are unlearnable (recall ~0 at H=7); severity resolution is effectively background /
+bloom-present.
+
+**A-DOC — target definition now has TWO forms.** Ordinal severity (5 FWC classes, primary for the
+severity/Path-B story) and binary (`class≥3`, derived, the daily-exceedance forecast metric we have
+measured throughout). Binary is byte-validated == `HAB_H` at every horizon, so all prior binary
+results stay exactly comparable. Fold both into `paper/design_rationale.md` and `source_set.md`:
+the paper reports the binary forecast as the headline and the ordinal model as a severity extension
+whose category accuracy is comparable-in-neighbourhood to Medina 2024 (not a head-to-head claim).
+
 ---
 
 ## 7. Scoreboard — are we on track, and when do we pivot?
@@ -485,7 +529,7 @@ A-DOC (opus-4-8) appends one row per experiment. Never rewrite history; supersed
 | E-04b | Bio-opt interactions | not started | | | | | | | | | |
 | E-04c | Shelf-specific thresholds | not started | | | | | | | | | |
 | E-05 | Monotone constraints | blocked E-02 | | | | | | | | | |
-| E-06 | Ordinal severity | STOP#1 done — awaiting go | | | | | | | | binary reproduced 100%; class-4 min=94 (no merge); +8.6–16.5% intermediate rows | — |
+| E-06 | Ordinal severity (Stage 1) | DONE (STOP#2) | 0.5002 ord / 0.4811 mc | ord −0.0006 / mc −0.0197 | ord [−0.005,+0.003]; mc [−0.036,−0.002] | 0.4630 ord / 0.4311 mc | ord +0.0041 / mc −0.0278 | — | — | **binary NULL (ordered) / NEGATIVE (multiclass)** — reframe does not lift binary. QWK H7=0.52; catAcc H7=76% (~Medina 73%, not comparable head-to-head) | R6 N/A · R-SPLIT ok |
 
 ### 7.2 Verdict rule (apply mechanically)
 
