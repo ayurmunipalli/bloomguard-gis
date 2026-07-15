@@ -485,7 +485,7 @@ A-DOC (opus-4-8) appends one row per experiment. Never rewrite history; supersed
 | E-04b | Bio-opt interactions | not started | | | | | | | | | |
 | E-04c | Shelf-specific thresholds | not started | | | | | | | | | |
 | E-05 | Monotone constraints | blocked E-02 | | | | | | | | | |
-| E-06 | Ordinal severity | not authorized | | | | | | | | | |
+| E-06 | Ordinal severity | STOP#1 done — awaiting go | | | | | | | | binary reproduced 100%; class-4 min=94 (no merge); +8.6–16.5% intermediate rows | — |
 
 ### 7.2 Verdict rule (apply mechanically)
 
