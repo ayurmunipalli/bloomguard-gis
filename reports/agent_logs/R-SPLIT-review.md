@@ -368,3 +368,41 @@ any reporting of the bio-inclusive model numbers:
 
 No action required of `modeling`. A7's bio-inclusive `best_model.rds` (H=7, temporal) is
 cleared on split-integrity grounds.
+
+---
+
+## 2026-07 · P0-A (temporal embargo) + P0-B (spatial buffer) — GATE REVIEW: **PASS**
+
+**Reviewer:** R-SPLIT (fable-5, train/test split leakage, block authority).
+**Scope:** the two split-defect repairs in `R/07c_split_repair.R` (adopted pre-bio re-freeze) and
+the apparatus fix in `R/07_modeling.R`. Verified independently from the parquet — did not trust the
+harness's own drop report.
+
+**Checklist:**
+1. **Control reproduces the frozen baseline (no accidental change).** PASS. Control arm (repair OFF,
+   bio excluded) reproduces `model_results.csv` exactly: random split Δ=0 all rows; all persistence
+   rows Δ=0; H=7 temporal rf pr_auc=0.5022, tp=382/fp=254/fn=693/tn=7551. 0 unexpected rows
+   (`outputs/tables/split_repair_validation.csv`).
+2. **P0-A embargo — no training label_date in the test period.** PASS at every horizon. Independent
+   recomputation: max train label_date (date_T + H) = 2015-12-31 (H=1/3), 2015-12-28 (H=5),
+   2015-12-30 (H=7/14) — all < the 2016-01-01 cutoff. The ~49-row H=14 leak is closed.
+3. **P0-B buffer — no train cell within R of any test cell.** PASS at every horizon. Independent
+   min train→test cell distance = 20,000 m = R at every horizon (drop `<R`, keep `≥R`). Residual
+   test-cells-within-R = 0 by construction.
+4. **Test sets unchanged (repairs drop only training rows).** PASS. Temporal test = year≥2016;
+   spatial test = holdout blocks; both identical to pre-repair. Confirmed by persistence rows Δ=0
+   (persistence depends only on the test set) and identical n_test/n_pos.
+5. **Orthogonality (one-change attribution).** PASS. Embargo touches only the temporal split, buffer
+   only the spatial split, random split untouched (Δ=0). Temporal Δ = embargo effect; spatial Δ =
+   buffer effect; no cross-confound.
+
+**Headline delta:** H=7 temporal PR-AUC 0.5022 → 0.5008 (Δ = −0.0014), inside the ±0.02 pivot band
+(§7.3) — not a pivot trigger. Spatial PR-AUC drops materially (H=7 0.663→0.617) — the buffer
+removing real border leakage, expected and correct.
+
+**Open item (not blocking P0-A/P0-B, blocking E-01):** the 20 km buffer is < E-01's ring-2 reach
+(~20 km). Before E-01 runs, widen `config split_repair.spatial_buffer_m` to ≥ 30000 (ring radius +
+1 cell) or the neighbour features re-open the leak. Recorded as `NOTE(limitation)` in
+`R/07c_split_repair.R` and PROJECT.md §2.1.
+
+**Verdict: PASS — no merge block.** Both repairs are sound; the re-frozen baseline is honest.

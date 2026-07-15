@@ -119,3 +119,22 @@
 | model_results.csv tagged feature_set='bio_inclusive' | ✅ PASS |
 | Before/after comparison table written | ✅ PASS |
 
+
+---
+
+## 2026-07 · P0-A (temporal embargo) + P0-B (spatial buffer) — apparatus fix
+
+Split-defect repairs for the two R-SPLIT conditional-pass caveats (this file's header NOTE blocks).
+Permanent apparatus fix lives in R/07_modeling.R (config-driven: `split_repair.temporal_embargo`,
+`split_repair.spatial_buffer_m`). The ADOPTED pre-bio baseline was re-frozen via R/07c_split_repair.R
+(07_modeling.R itself now produces the bio-inclusive run, which was NOT adopted, so it cannot be used
+to re-freeze §6 — 07c excludes the 71 bio features to reproduce the shipped model).
+
+- **P0-A embargo:** drop train rows whose label_date (date_T + H) >= 2016-01-01. Dropped H=1:1 /
+  H=3:3 / H=5:12 / H=7:23 / H=14:49. H=7 temporal PR-AUC 0.5022 -> 0.5008 (Δ = -0.0014, no pivot).
+- **P0-B buffer:** drop train cells within 20 km (2 cells) of any spatial-test cell. Residual
+  test-cells-within-R = 0 at every horizon. Spatial H=7 PR-AUC 0.663 -> 0.617 (now below random).
+- **Control:** 07c reproduces the pre-embargo baseline exactly (random Δ=0, persistence Δ=0, H=7
+  temporal tp=382). **R-SPLIT gate: PASS** (reports/agent_logs/R-SPLIT-review.md).
+- **Result card:** reports/results/P0-A-P0-B_split_repair.md. **§6 re-frozen; §7.1 keeps pre-embargo.**
+- **E-01 caveat:** widen buffer to >= 30 km before E-01 (ring-2 reach). NOTE(limitation) in 07c + config.

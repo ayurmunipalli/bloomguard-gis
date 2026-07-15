@@ -52,6 +52,14 @@ evaluation:
   all_metrics: ["accuracy", "precision", "recall", "f1", "roc_auc", "pr_auc"]
   baselines: ["persistence", "chlorophyll_only"]
 
+# --- Split-defect repairs (P0-A temporal embargo, P0-B spatial buffer) ---
+# Measurement-apparatus fixes for the two R-SPLIT conditional-pass defects
+# (R/07_modeling.R:38-72). Only affect TRAINING rows; test sets are unchanged.
+split_repair:
+  temporal_embargo: true      # P0-A: drop train rows whose label_date (date_T + H) falls in the test period (>= cutoff)
+  spatial_buffer_m: 20000     # P0-B: drop train cells within this distance (m) of any spatial-test cell. Default 2 cells (10 km grid).
+                              # NOTE: E-01 ring-2 neighbour features require buffer >= ring_radius + 1 cell (i.e. >= 30000 m). See R/07c_split_repair.R.
+
 # --- Paths (contracts between agents; PLAN.md §4/§6) ---
 paths:
   raw_habsos: "data/raw/habsos"

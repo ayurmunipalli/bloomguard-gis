@@ -105,8 +105,13 @@ Methods & techniques / Open questions & caveats.
 2. **Feature parity in any model comparison.** The current RF-vs-transformer head-to-head is
    feature-mismatched (RF has ERA5 wind; the transformer does not). Never compare two models
    trained on different feature sets and report it as a model-architecture result.
-3. **One scorer.** `model_results.csv` is authoritative (post-wind). `head_to_head_comparison.csv`
-   is stale (pre-wind RF) and must be regenerated or deleted, not read.
+3. **One scorer.** `outputs/tables/model_results.csv` is the sole authoritative
+   results table — it reports the adopted model. `model_results_bio_inclusive.csv`
+   is a frozen experiment artifact from the bio-optical negative (H=7 temporal
+   PR-AUC 0.4849 vs the adopted 0.5022): do not cite it, do not score against it,
+   do not treat it as a baseline. Any new comparison table needs a name that says
+   it is an experiment, and a header line saying so. Two tables that disagree is
+   how D4 happened; deleting one instance does not retire the rule.
 4. **Feature importance for *selection* must be train-derived.** `mean_abs_shap` in
    `top_features.csv` / `variable_importance.csv` is computed by permuting the **test set**
    (`R/08_explainability.R:169–178`). It is a valid *diagnostic* and invalid as a *selection

@@ -48,28 +48,29 @@ local({
 # NOTE(paper): ARROW_NUM_THREADS=1 set in 00_config.R to prevent arrow deadlock
 #              (observed on this host: 7 processes at 95% CPU for 15h).
 
-# ── R-SPLIT CONDITIONAL-PASS CAVEATS (documentation only — no model change) ─
-# NOTE(paper): SPATIAL SPLIT PREVALENCE CONFOUND.
+# ── R-SPLIT CONDITIONAL-PASS CAVEATS — TWO OF THREE NOW REPAIRED (P0-A, P0-B) ─
+# NOTE(paper): SPATIAL SPLIT PREVALENCE CONFOUND (still open — not a P0 target).
 #   The spatial-block holdout always isolates Collier County (block 12_115),
 #   the dominant HAB hotspot, which has 11.4% positive rate vs 8.4% in the
-#   random test set (1.35× higher prevalence). The spatial PR-AUC (H=7: 0.663)
-#   exceeding the random PR-AUC (0.631) reflects held-out prevalence, NOT better
-#   geographic generalisation and NOT leakage. The TEMPORAL split (H=7 PR-AUC=0.497)
-#   is the headline honest forecasting number. The spatial result should be read as
-#   "geographic transfer to a high-prevalence region" and reported as such in the paper.
-#   Additionally, 14.6% of spatial test cells fall within ~10 km of a train cell at
-#   county block borders — residual spatial autocorrelation that cannot be eliminated
-#   without sub-county blocking or a buffer zone. Acknowledge in limitations.
+#   random test set (1.35× higher prevalence). It is a single fixed geography
+#   (n=1, no rotation). Report the spatial result as "geographic transfer to a
+#   high-prevalence region." POST-BUFFER (P0-B): spatial H=7 PR-AUC 0.663 -> 0.617
+#   now sits BELOW random (0.631), confirming the earlier spatial>random gap was
+#   border leakage, not generalisation. The TEMPORAL split is the headline honest
+#   number.
 #
-# NOTE(limitation): TEMPORAL SPLIT ZERO-EMBARGO (H=14).
-#   No purge/embargo gap was implemented at the 2016 train/test boundary. At H=14,
-#   a training row at feature date T and a label at T+14 can straddle the boundary:
-#   approximately 49 training rows (0.33% of H=14 training set) have a label_date
-#   (T+14) falling in the test period (≥2016-01-01). This is a small optimistic leak
-#   bounded by HABSOS sparsity (consecutive same-cell observations separated by exactly
-#   14 days are rare). Effect on reported PR-AUC is negligible but not zero. A future
-#   iteration should add an H-day embargo window around the temporal boundary so no
-#   training label_date falls in the test feature-date range.
+# NOTE(paper): SPATIAL BORDER ADJACENCY — REPAIRED by P0-B (spatial buffer).
+#   14.6% of spatial test cells fell within ~10 km of a train cell at county-block
+#   borders (43-44% within 20 km). SPATIAL_BUFFER_M (config, default 20000 m) now
+#   drops every train cell within R of any test cell; residual test-cells-within-R
+#   is 0 by construction. See the P0-B block in the spatial split below.
+#
+# NOTE(paper): TEMPORAL ZERO-EMBARGO — REPAIRED by P0-A (temporal embargo).
+#   ~49 training rows at H=14 (fewer at shorter H) had a label_date (date_T + H)
+#   falling in the test period (>= 2016-01-01). EMBARGO_ON (config, default true)
+#   now drops them. Effect on H=7 temporal PR-AUC: -0.0014 (negligible, as
+#   predicted). See the P0-A block in the temporal split below and
+#   reports/results/P0-A-P0-B_split_repair.md.
 
 # ── LIBRARIES ──────────────────────────────────────────────────────────────
 suppressPackageStartupMessages({
@@ -78,6 +79,7 @@ suppressPackageStartupMessages({
   library(data.table)
   library(ranger)
   library(ggplot2)
+  library(sf)                        # P0-B spatial buffer: project centroids to EPSG:5070
 })
 
 message("[A7] Libraries loaded.")
@@ -99,7 +101,16 @@ SEED        <- cfg$random_seed %||% 42
 NUM_TREES   <- 500L
 TRAIN_FRAC  <- 0.80            # random split train proportion
 TEMPORAL_CUTOFF_YEAR <- 2016L  # train ≤ 2015, test ≥ 2016 (~74% / 26%)
+CUTOFF_DATE <- as.Date(paste0(TEMPORAL_CUTOFF_YEAR, "-01-01"))
 MIN_BLOCK_ROWS <- 5L           # merge spatial blocks smaller than this
+# ── P0-A / P0-B split-defect repairs (config-driven) ──────────────────────
+# See R/07c_split_repair.R (validated re-freeze of the adopted pre-bio baseline)
+# and PROJECT.md §2.1. Both touch ONLY training rows; test sets are unchanged.
+EMBARGO_ON       <- isTRUE(cfg$split_repair$temporal_embargo)             # P0-A
+SPATIAL_BUFFER_M <- as.numeric(cfg$split_repair$spatial_buffer_m %||% 0)  # P0-B (metres)
+# NOTE(limitation): E-01 adds ring-2 (~20 km) neighbour features; the buffer must
+#   then exceed ring_radius + 1 cell (>= 30000 m). Bump config split_repair.
+#   spatial_buffer_m to >= 30000 before running E-01, or neighbours re-open the leak.
 LOG_FEATURES <- c("chlor_a_mean", "nflh_mean", "Kd_490_mean")  # heavy-tailed
 FEATURE_SET_TAG <- "bio_inclusive"  # NOTE(paper): tags this run's model_results.csv
 # rows so the AFTER (bio-inclusive) run is unambiguously distinguishable from
@@ -212,6 +223,25 @@ for (feat in LOG_FEATURES) {
 #                   because trends can be negative and their scale differences are
 #                   informative. Heavy-tailed trend behaviour is mitigated by RF's
 #                   split-based partitioning (robust to monotone transformations).
+
+# ── P0-B: CELL CENTROIDS PROJECTED TO EPSG:5070 (metric buffer distances) ──
+# NOTE(paper): buffer distances computed in Albers Equal Area (EPSG:5070), the
+#              config projected CRS. One row per unique cell; keyed for fast lookup.
+.cell_xy <- unique(dt[, .(cell_id, centroid_lon, centroid_lat)])
+.proj_xy <- sf::sf_project("EPSG:4326", "EPSG:5070",
+                           as.matrix(.cell_xy[, .(centroid_lon, centroid_lat)]))
+.cell_xy[, `:=`(X = .proj_xy[, 1], Y = .proj_xy[, 2])]
+setkey(.cell_xy, cell_id)
+
+# P0-B helper: which TRAIN cells lie within R metres of any TEST cell (to drop).
+train_cells_within_buffer <- function(train_cells, test_cells, R) {
+  if (R <= 0) return(character(0))
+  tr <- .cell_xy[.(unique(train_cells))]; te <- .cell_xy[.(unique(test_cells))]
+  if (nrow(te) == 0 || nrow(tr) == 0) return(character(0))
+  drop <- vapply(seq_len(nrow(tr)), function(i)
+    sqrt(min((te$X - tr$X[i])^2 + (te$Y - tr$Y[i])^2)) < R, logical(1))
+  tr$cell_id[drop]
+}
 
 # ── IMPUTATION WITH MISSINGNESS FLAG ──────────────────────────────────────
 # NOTE(paper): median imputation + binary missingness indicator per NA column.
@@ -438,6 +468,18 @@ for (H in HORIZONS) {
   # (2) TEMPORAL HOLDOUT: train on date < cutoff, test on date >= cutoff
   temp_train_idx <- which(h_dt$year < TEMPORAL_CUTOFF_YEAR)
   temp_test_idx  <- which(h_dt$year >= TEMPORAL_CUTOFF_YEAR)
+  # ── P0-A TEMPORAL EMBARGO ──────────────────────────────────────────────
+  # NOTE(paper): drop training rows whose label_date (date_T + H) falls in the
+  #   test period (>= CUTOFF_DATE). Closes the zero-embargo leak (~49 rows at
+  #   H=14). Test set is unchanged (embargo removes only training rows).
+  #   Validated in R/07c_split_repair.R; effect on H=7 temporal PR-AUC = -0.0014.
+  if (EMBARGO_ON) {
+    keep_emb <- (h_dt$date_T[temp_train_idx] + H) < CUTOFF_DATE
+    n_emb_drop <- sum(!keep_emb)
+    temp_train_idx <- temp_train_idx[keep_emb]
+    message("[A7] P0-A embargo H=", H, ": dropped ", n_emb_drop,
+            " training rows (label_date in test period)")
+  }
   # NOTE(paper): temporal split is the primary honest forecasting evaluation.
   #              Training on 2003-2015, testing on 2016-2021 respects
   #              the time-series nature of HAB forecasting.
@@ -453,6 +495,19 @@ for (H in HORIZONS) {
   holdout_blocks <- names(block_sizes)[seq_len(n_holdout)]
   spat_test_idx  <- which(h_dt$block_cv %in% holdout_blocks)
   spat_train_idx <- setdiff(seq_len(nrow(h_dt)), spat_test_idx)
+  # ── P0-B SPATIAL BUFFER ────────────────────────────────────────────────
+  # NOTE(paper): drop training CELLS within SPATIAL_BUFFER_M of any test cell,
+  #   removing the 14.6% border-adjacency residual autocorrelation. Residual
+  #   test-cells-within-R is 0 by construction. Test set unchanged (buffer
+  #   removes only training cells). Validated in R/07c_split_repair.R.
+  if (SPATIAL_BUFFER_M > 0) {
+    drop_cells  <- train_cells_within_buffer(h_dt$cell_id[spat_train_idx],
+                                             h_dt$cell_id[spat_test_idx], SPATIAL_BUFFER_M)
+    keep_buf    <- !(h_dt$cell_id[spat_train_idx] %in% drop_cells)
+    message("[A7] P0-B buffer H=", H, " (R=", SPATIAL_BUFFER_M, "m): dropped ",
+            length(drop_cells), " train cells / ", sum(!keep_buf), " rows")
+    spat_train_idx <- spat_train_idx[keep_buf]
+  }
   # NOTE(paper): spatial holdout tests geographic generalisation by holding out
   #              contiguous county-level blocks. Blocks chosen greedily to reach
   #              ~15% of labelled rows.

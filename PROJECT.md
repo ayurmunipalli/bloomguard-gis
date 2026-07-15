@@ -39,26 +39,32 @@ are recorded here, not only in script headers, because that is exactly how they 
 
 ### 2.1 The splits do not have the honesty properties we have been claiming
 
-R-SPLIT issued **conditional passes**, written as `NOTE(limitation)` in `R/07_modeling.R:38–60`,
+R-SPLIT issued **conditional passes**, written as `NOTE(limitation)` in `R/07_modeling.R`,
 and they never propagated to any summary document:
 
-- **Temporal split has zero embargo.** No purge/gap at the 2016 boundary. At H=14, ~49 training
-  rows (0.33% of the H=14 training set) have a label date falling inside the test period. Small,
-  bounded by HABSOS sparsity — but the effect on PR-AUC is "negligible but not zero," and we have
-  no CI, so "negligible" is an assertion.
-- **Spatial split has no buffer.** **14.6% of spatial test cells lie within ~10 km of a train
-  cell** at county-block borders. Residual spatial autocorrelation that cannot be removed without
-  sub-county blocking or a buffer zone.
-- **Spatial split has a prevalence confound.** The holdout deterministically isolates Collier
-  County (block `12_115`), the dominant hotspot: 11.4% positive vs 8.4% in the random test set
-  (1.35×). Spatial H=7 PR-AUC (0.658) exceeding random (0.631) reflects **held-out prevalence,
-  not better geographic generalisation.** It is "geographic transfer to a high-prevalence region"
-  and must be reported as such. It is also a single fixed geography — n=1, no rotation.
+- **Temporal split has zero embargo. → RESOLVED by P0-A (2026-07).** No purge/gap at the 2016
+  boundary. At H=14, ~49 training rows (0.33% of the H=14 training set) had a label date falling
+  inside the test period. **P0-A now drops every training row whose label_date (date_T + H) lands
+  in the test period** (dropped: H=1:1 · H=3:3 · H=5:12 · H=7:23 · H=14:49). Effect on the headline:
+  H=7 temporal PR-AUC 0.5022 → 0.5008 (Δ = −0.0014) — the leak was real but negligible, as claimed.
+- **Spatial split has no buffer. → RESOLVED by P0-B (2026-07).** 14.6% of spatial test cells lay
+  within ~10 km of a train cell at county-block borders (43–44% within the 20 km buffer radius).
+  **P0-B now drops every train cell within R (config `split_repair.spatial_buffer_m`, default
+  20 km = 2 cells) of any test cell**; residual test-cells-within-R is **0 by construction** at
+  every horizon. Cost: 8–17 cells / 200–1,960 rows dropped per horizon.
+- **Spatial split has a prevalence confound (unchanged — not a P0 target).** The holdout
+  deterministically isolates Collier County (block `12_115`), the dominant hotspot: 11.4% positive
+  vs 8.4% in the random test set (1.35×). **Post-buffer, spatial H=7 PR-AUC 0.663 → 0.6165 now sits
+  *below* random (0.631) — the earlier spatial>random gap was border leakage, not geographic
+  generalisation, which P0-B confirms.** Still a single fixed geography — n=1, no rotation — so the
+  prevalence confound and lack of rotation remain open limitations.
 
-**Consequence:** the temporal split is the headline honest number, and it is honest *modulo a
-missing embargo*. Fix before measuring anything (§3, P0-A). **E-01 is unrunnable until the
-spatial buffer exists** — neighbour features turn a 14.6% border adjacency into a direct leakage
-channel, which is what makes E-01 the most leakage-prone experiment in the queue.
+**Consequence:** the temporal split is the headline honest number, and it is now honest *with the
+embargo* (P0-A landed; Δ = −0.0014, so the prior number stands). **E-01's spatial buffer now
+exists** (P0-B, default 20 km) — but note E-01 adds ring-2 (~20 km) neighbour features, so the
+buffer must be widened to **≥ 30 km (ring radius + 1 cell)** before E-01 runs, or the neighbour
+features re-open the border-adjacency leak. Bump `config.yaml split_repair.spatial_buffer_m` to
+≥ 30000 at that point (`NOTE(limitation)` in `R/07c_split_repair.R`).
 
 ### 2.2 The RF loses to persistence at default thresholds — but this is an operating point, not a skill gap
 
@@ -355,20 +361,27 @@ not a tree tweak.** It re-opens the evaluation story. Agents may not initiate it
 
 ---
 
-## 6. Frozen baseline — RF, temporal split (post-wind, pre-bio-optical, **pre-embargo**)
+## 6. Frozen baseline — RF, temporal split (post-wind, pre-bio-optical, **post-embargo (P0-A)**)
 
-From `outputs/tables/model_results.csv`. **Re-freeze after P0-A/P0-B, and again after E-00.**
+From `outputs/tables/model_results.csv`. **Re-frozen 2026-07 after P0-A (temporal embargo) + P0-B
+(spatial buffer).** Pre-embargo numbers preserved in the §7.1 scoreboard row so the delta stays
+visible. **Re-freeze again after E-00.** Reproduced by `R/07c_split_repair.R` (control arm matches
+the pre-embargo table exactly: random split + all persistence rows Δ=0).
 
 | H | PR-AUC | p@r80 | Recall | Precision | FNR | Test prev | Train prev | n_test | n_pos |
 |---|---|---|---|---|---|---|---|---|---|
-| 1 | 0.6427 | 0.4980 | 0.5772 | 0.6276 | 0.4228 | 15.7% | 9.9% | 3,004 | 473 |
-| 3 | 0.6446 | 0.5142 | 0.5331 | 0.6968 | 0.4669 | 18.5% | 12.7% | 1,952 | 362 |
-| 5 | 0.6726 | 0.4671 | 0.5023 | 0.7219 | 0.4977 | 16.2% | 12.3% | 2,677 | 434 |
-| **7** | **0.5022** | **0.2759** | **0.3553** | **0.6006** | **0.6447** | **12.1%** | **7.2%** | **8,880** | **1,075** |
-| 14 | 0.4587 | 0.2353 | 0.2614 | 0.6125 | 0.7386 | 11.2% | 6.7% | 9,021 | 1,010 |
+| 1 | 0.6437 | 0.5000 | 0.5877 | 0.6362 | 0.4123 | 15.7% | 9.9% | 3,004 | 473 |
+| 3 | 0.6544 | 0.4957 | 0.5249 | 0.6835 | 0.4751 | 18.5% | 12.7% | 1,952 | 362 |
+| 5 | 0.6724 | 0.4652 | 0.5138 | 0.7264 | 0.4862 | 16.2% | 12.3% | 2,677 | 434 |
+| **7** | **0.5008** | **0.2750** | **0.3581** | **0.6073** | **0.6419** | **12.1%** | **7.2%** | **8,880** | **1,075** |
+| 14 | 0.4589 | 0.2295 | 0.2574 | 0.6005 | 0.7426 | 11.2% | 6.7% | 9,021 | 1,010 |
 
-H=7 temporal confusion (authoritative, A7 == A10 post-reconciliation):
-**TP=382 · FP=254 · FN=693 · TN=7551.**
+H=7 temporal confusion (post-embargo, A7-equivalent via `R/07c_split_repair.R`):
+**TP=385 · FP=249 · FN=690 · TN=7556.**
+**Δ vs pre-embargo baseline: H=7 temporal PR-AUC 0.5022 → 0.5008 (Δ = −0.0014), well inside the
+±0.02 pivot band — the pre-embargo baseline was honest modulo the ~49-row H=14 leak.** Embargo
+train-rows dropped: H=1:1 · H=3:3 · H=5:12 · H=7:23 · H=14:49. Test sets unchanged (embargo drops
+only training rows), so persistence and chl-only reference numbers are unchanged / near-unchanged.
 
 **Note the train/test prevalence shift:** test prevalence is ~1.6× train at every horizon, because
 the 2016 cutoff holds out the post-2015 HABSOS intensive-sampling era. The temporal split is
@@ -393,19 +406,19 @@ A-DOC (opus-4-8) appends one row per experiment. Never rewrite history; supersed
 
 | ID | Experiment | Status | H=7 PR-AUC | Δ | 95% CI | H=14 PR-AUC | Δ | Beats pers. @r80? | FP conc. | Verdict | Gates |
 |----|-----------|--------|-----------|---|--------|-------------|---|---|---|---------|-------|
-| — | **BASELINE (RF, pre-embargo)** | frozen | 0.5022 | — | *P0-C* | 0.4587 | — | ✓ (0.276 vs 0.215) | 19× | — | conditional |
-| P0-A | Temporal embargo | not started | | | | | | | | | |
-| P0-B | Spatial buffer | not started | | | | | | | | | |
+| — | **BASELINE (RF, pre-embargo)** | superseded | 0.5022 | — | *P0-C* | 0.4587 | — | ✓ (0.276 vs 0.215) | 19× | — | conditional |
+| P0-A | Temporal embargo | DONE | 0.5008 | −0.0014 | *P0-C* | 0.4589 | +0.0002 | | | apparatus fix | R-SPLIT: PASS |
+| P0-B | Spatial buffer | DONE | — | — | | — | — | | | apparatus fix (spatial H=7 0.663→0.617) | R-SPLIT: PASS |
 | P0-H | Transformer p@r80 | not started | | | | | | | | | |
 | P0-I | Train-side importance | not started | | | | | | | | | |
 | P0-J | Sampling-regime test | DONE | | | | | | | | REJECTED | — |
-| — | **BASELINE re-frozen** | pending | | | | | | | | | |
+| — | **BASELINE re-frozen (RF, post-embargo+buffer)** | frozen | 0.5008 | — | *P0-C* | 0.4589 | — | ✓ (0.275 vs 0.215) | 19× | — | R-SPLIT: PASS |
 | S0 | Effective event count | not started | | | | | | | | | |
 | S0b | TabPFN v2 | not started | | | | | | | | | |
 | E-00 | Feature pruning (OOB) | blocked P0-I | | | | | | | | | |
 | E-00b | Transformer re-run, pruned | blocked E-00 | | | | | | | | | |
-| E-01a | Spatial lag (isotropic) | blocked P0-B, E-00 | | | | | | | | | |
-| E-01b | Spatial lag (upstream) | blocked P0-B, E-00 | | | | | | | | | |
+| E-01a | Spatial lag (isotropic) | blocked E-00 (+widen buffer ≥30km) | | | | | | | | | |
+| E-01b | Spatial lag (upstream) | blocked E-00 (+widen buffer ≥30km) | | | | | | | | | |
 | E-02 | GBDT + AUPRC + calib | not started | | | | | | | | | |
 | E-03 | Persistence↔tree cascade | blocked E-02 | | | | | | | | | |
 | E-04a | Bio-opt flags as booleans | not started | | | | | | | | | |
