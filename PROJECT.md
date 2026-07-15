@@ -160,18 +160,18 @@ the paper.
 
 ## 3. P0 — prerequisites. Nothing in §5 runs until these land.
 
-| ID | Task | Owner | Why it blocks |
-|---|---|---|---|
-| **P0-A** | **Add an H-day embargo** around the temporal boundary: no training row's label date may fall in the test feature-date range. Re-run A7. | `modeling` (fable-5), gate R-SPLIT | Every baseline number is measured without it. |
-| **P0-B** | **Add a spatial buffer** to the block holdout: drop train cells within ≥1 neighbourhood radius of any test cell. Report how many rows this costs. | `modeling`, gate R-SPLIT | **E-01 cannot run without it.** |
-| **P0-C** | **Block-bootstrap CIs on the frozen baseline** (§5), n=1000, blocks = contiguous time segments. | `validation` (opus-4-8) | Without them no Δ in §4 is interpretable. |
-| **P0-D** ✅ **DONE** | **Deleted `head_to_head_comparison.csv`** (stale pre-wind RF numbers that disagreed with `model_results.csv`). | `modeling` | Stale numbers get cited. |
-| **P0-E** ✅ **DONE** | **Merged the bio-optical branch into `main` and pushed to the remote** (`21320f7`). | lead | A documented negative result exists only on one laptop. |
-| **P0-F** | **Fix `IS_PLACEHOLDER_ROW` AND→OR** at `R/05_environmental_features.R:773`. Re-run A5→A6. No retrain. | `env-features` | Row-level honesty flag silently zeroed once wind went real; precip/salinity are still placeholders. |
-| **P0-G** | **`renv::record("ecmwfr")`** — narrow only, never a blind snapshot. | lead | Reproducibility. |
-| **P0-H** | **Compute `prec_at_recall80` for the transformer.** It is empty for all 15 transformer rows. | `transformer` (fable-5) | It is the only metric that compares RF vs transformer at a matched operating point. Without it §2.3 cannot be settled. |
-| **P0-I** | **Recompute feature importance train-side** (OOB or training-fold CV) and write it as a separate, clearly-labelled column/table. Mark `mean_abs_shap` as diagnostic-only. | `explain` (opus-4-8) | E-00 cannot prune without it. See §2.5. |
-| **P0-J** | **Test the sampling-regime hypothesis:** non-missing rate of `hab_any_prior_7d`/`_14d`, train vs test, per horizon. One query. | `validation` (opus-4-8) | Confirms or kills the single mechanism that would explain §2.2 + §2.4 + §2.5 at once. |
+| ID | Status | Task | Owner | Why it blocks |
+|---|---|---|---|---|
+| **P0-A** | not started | **Add an H-day embargo** around the temporal boundary: no training row's label date may fall in the test feature-date range. Re-run A7. | `modeling` (fable-5), gate R-SPLIT | Every baseline number is measured without it. |
+| **P0-B** | not started | **Add a spatial buffer** to the block holdout: drop train cells within ≥1 neighbourhood radius of any test cell. Report how many rows this costs. | `modeling`, gate R-SPLIT | **E-01 cannot run without it.** |
+| **P0-C** | not started | **Block-bootstrap CIs on the frozen baseline** (§5), n=1000, blocks = contiguous time segments. | `validation` (opus-4-8) | Without them no Δ in §4 is interpretable. |
+| **P0-D** | **DONE** | **Deleted `head_to_head_comparison.csv`** (stale pre-wind RF numbers that disagreed with `model_results.csv`). | `modeling` | Stale numbers get cited. |
+| **P0-E** | **DONE** | **Merged the bio-optical branch into `main` and pushed to the remote** (`21320f7`). | lead | A documented negative result exists only on one laptop. |
+| **P0-F** | not started | **Fix `IS_PLACEHOLDER_ROW` AND→OR** at `R/05_environmental_features.R:773`. Re-run A5→A6. No retrain. | `env-features` | Row-level honesty flag silently zeroed once wind went real; precip/salinity are still placeholders. |
+| **P0-G** | not started | **`renv::record("ecmwfr")`** — narrow only, never a blind snapshot. | lead | Reproducibility. |
+| **P0-H** | not started | **Compute `prec_at_recall80` for the transformer.** It is empty for all 15 transformer rows. | `transformer` (fable-5) | It is the only metric that compares RF vs transformer at a matched operating point. Without it §2.3 cannot be settled. |
+| **P0-I** | not started | **Recompute feature importance train-side** (OOB or training-fold CV) and write it as a separate, clearly-labelled column/table. Mark `mean_abs_shap` as diagnostic-only. | `explain` (opus-4-8) | E-00 cannot prune without it. See §2.5. |
+| **P0-J** | not started | **Test the sampling-regime hypothesis:** non-missing rate of `hab_any_prior_7d`/`_14d`, train vs test, per horizon. One query. | `validation` (opus-4-8) | Confirms or kills the single mechanism that would explain §2.2 + §2.4 + §2.5 at once. |
 
 **P0-A and P0-B will move the baseline.** Expect the temporal number to shift slightly and the
 spatial number to drop. Re-freeze §5 afterward. This is the point: a baseline measured on a
@@ -373,6 +373,7 @@ chl-only 0.2139 / 0.2282 / 0.1918 / 0.1417 / 0.1220 (H=1/3/5/7/14).
 ## 7. Scoreboard — are we on track, and when do we pivot?
 
 ### 7.1 Live scoreboard
+Scoreboard rows are for work that produces a metric. Non-metric P0 chores are tracked in §3 only.
 A-DOC (opus-4-8) appends one row per experiment. Never rewrite history; supersede.
 
 | ID | Experiment | Status | H=7 PR-AUC | Δ | 95% CI | H=14 PR-AUC | Δ | Beats pers. @r80? | FP conc. | Verdict | Gates |
@@ -380,8 +381,6 @@ A-DOC (opus-4-8) appends one row per experiment. Never rewrite history; supersed
 | — | **BASELINE (RF, pre-embargo)** | frozen | 0.5022 | — | *P0-C* | 0.4587 | — | ✓ (0.276 vs 0.215) | 19× | — | conditional |
 | P0-A | Temporal embargo | not started | | | | | | | | | |
 | P0-B | Spatial buffer | not started | | | | | | | | | |
-| P0-D | Delete stale head_to_head | ✅ DONE | | | | | | | | | |
-| P0-E | Merge + push bio-optical branch | ✅ DONE | | | | | | | | | |
 | P0-H | Transformer p@r80 | not started | | | | | | | | | |
 | P0-I | Train-side importance | not started | | | | | | | | | |
 | P0-J | Sampling-regime test | not started | | | | | | | | | |
