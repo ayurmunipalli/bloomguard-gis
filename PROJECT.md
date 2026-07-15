@@ -406,6 +406,19 @@ binary derived; A-DOC note below**). Adopted features, repaired splits.
   class-3 boundary (the one path that could convert the multiclass NEGATIVE into a binary gain);
   threshold-lowering to 50k; weak-label/sampling-density pretraining.
 
+### E-07 · Cloud-robust satellite compositing `[DONE — NULL; rules out the imputation ceiling]`
+The focal satellite features were ~67% NA (cloud), median-imputed at fit (constants on 2/3 of rows).
+E-07 replaced that with a trailing clear-sky composite (W=8, LOCF ≤ T) + `days_since_clear` age
+features + trends recomputed on the composited series. **Coverage recovered 67%→15% NA (52% of rows
+constant→real), R6 + R-SPLIT PASS.** **But ΔPR-AUC is NULL at every temporal horizon** (H=7 +0.0073
+[−0.007, +0.021]); only random H=7 is resolved and it is *negative* (−0.024). **Feature imputation
+is NOT the ceiling.** Mechanism: the raw arm already used median + `_is_missing` flag, so the tree
+branched on clear-vs-cloudy and fell back to the seasonal median (≈ `month`/`doy`); a 2–3-day-old
+real chl adds little over that for an H-day-ahead forecast. **Consequence:** the four provisional
+negatives (wind/bio/ordinal/spatial) are unlikely to be feature-degradation artifacts — the RF's
+skill is insensitive to satellite feature quality. The ceiling is label density / intrinsic
+predictability, not imputation. See `reports/results/E-07_cloud_composite.md`.
+
 ### Deferred
 - **Supervision fix** (restrict training to well-sampled periods; add a sampling-density feature so
   the model can condition on regime; HABSOS+satellite label fusion). **Promoted from "parked" to a
@@ -543,6 +556,7 @@ A-DOC (opus-4-8) appends one row per experiment. Never rewrite history; supersed
 | E-04c | Shelf-specific thresholds | not started | | | | | | | | | |
 | E-05 | Monotone constraints | blocked E-02 | | | | | | | | | |
 | E-06 | Ordinal severity (Stage 1) | DONE (STOP#2) | 0.5002 ord / 0.4811 mc | ord −0.0006 / mc −0.0197 | ord [−0.005,+0.003]; mc [−0.036,−0.002] | 0.4630 ord / 0.4311 mc | ord +0.0041 / mc −0.0278 | — | — | **binary NULL (ordered) / NEGATIVE (multiclass)** — reframe does not lift binary. QWK H7=0.52; catAcc H7=76% (~Medina 73%, not comparable head-to-head) | R6 N/A · R-SPLIT ok |
+| E-07 | Cloud-robust satellite compositing | DONE | 0.5072 | +0.0073 | [−0.007, +0.021] | 0.4645 | +0.0051 [−0.012,+0.022] | — | — | **NULL** — coverage 67%→15% NA (52% of rows constant→real), but ΔPR-AUC null at every temporal H. **Feature imputation is NOT the ceiling.** Not SUSPECT. | R6: PASS · R-SPLIT: PASS |
 
 ### 7.2 Verdict rule (apply mechanically)
 
