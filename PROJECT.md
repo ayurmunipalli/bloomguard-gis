@@ -280,12 +280,19 @@ feature set (**with wind, for parity — §2.3**) and compare the gap before vs 
 Either outcome is a paper section. Cost: one re-run.
 
 ### E-01 · Spatial-lag features `[HIGHEST PRIORITY — blocked on buffer≥30km, E-00]` — `datacube` + `modeling`
-**HARD BLOCK — do not start until `config.yaml split_repair.spatial_buffer_m >= 30000` AND A7 is
-re-run under it. E-01's ring-2 features (~20 km) reach a 20 km buffer and reopen the spatial leak.**
-The current buffer is 20 km (P0-B default), which equals ring-2 reach — a ring-2 neighbour feature
-would pull from a test-adjacent cell straight across the buffer. Widen to ≥ 30 km (ring radius +
-1 cell), re-run A7, re-freeze, and only then build E-01 features. A large spatial gain measured on
-a 20 km buffer is leakage, not skill.
+**DONE (ring-1 only, option c) — verdict NULL. See `reports/results/E-01a_spatial_lag.md`.**
+E-01a built ring-1 (queen, ~10 km) neighbour features on the current 20 km buffer (which
+gate-passes for ring-1 reach: 14.14 km < 20 km; R6 + R-SPLIT PASS). **Every temporal ΔPR-AUC CI
+includes 0** (H=7 −0.0039 [−0.017, +0.009]; H=14 +0.0012 [−0.019, +0.018]); no advection signature
+(flat-to-negative across horizons); not SUSPECT. Mechanism: neighbours are unobserved at T for ~1
+in 5 rows (median `nbr_count`=2/8) — same-date aggregation can't carry the advection signal.
+**Ring-2 not revisited** (ring-1 showed no real signal); E-01b not pursued.
+
+**Ring-2 (if ever revisited) HARD BLOCK — do not start until `config.yaml
+split_repair.spatial_buffer_m >= 30000` AND A7 is re-run under it. Ring-2 features (~20 km) reach a
+20 km buffer and reopen the spatial leak.** Widen to ≥ 30 km (ring radius + 1 cell), re-run A7,
+re-freeze first. A large spatial gain measured on a 20 km buffer is leakage, not skill. (Buffer-cost
+of the 30 km bump: `reports/results/E-01_buffer_cost.md`, author chose option (c) — ring-1 only.)
 
 **Hypothesis.** The per-cell design discards spatial coherence. At H=7/14 a cell's risk depends
 more on what is advecting *toward* it than on its own state. This is also the only region where
@@ -470,8 +477,8 @@ A-DOC (opus-4-8) appends one row per experiment. Never rewrite history; supersed
 | S0b | TabPFN v2 | not started | | | | | | | | | |
 | E-00 | Feature pruning (OOB) | blocked P0-I | | | | | | | | | |
 | E-00b | Transformer re-run, pruned | blocked E-00 | | | | | | | | | |
-| E-01a | Spatial lag (isotropic) | **blocked: buffer≥30km** (also E-00) | | | | | | | | | |
-| E-01b | Spatial lag (upstream) | **blocked: buffer≥30km** (also E-00) | | | | | | | | | |
+| E-01a | Spatial lag (ring-1, opt. c) | DONE | 0.4969 | −0.0039 | [−0.017, +0.009] | 0.4601 | +0.0012 [−0.019,+0.018] | — | — | **NULL** (all temporal CIs incl. 0; no advection signature) | R6: PASS · R-SPLIT: PASS |
+| E-01b | Spatial lag (upstream) | not pursued (E-01a NULL) | | | | | | | | | |
 | E-02 | GBDT + AUPRC + calib | not started | | | | | | | | | |
 | E-03 | Persistence↔tree cascade | blocked E-02 | | | | | | | | | |
 | E-04a | Bio-opt flags as booleans | not started | | | | | | | | | |
