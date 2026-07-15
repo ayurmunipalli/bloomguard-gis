@@ -171,7 +171,7 @@ the paper.
 | **P0-G** | not started | **`renv::record("ecmwfr")`** — narrow only, never a blind snapshot. | lead | Reproducibility. |
 | **P0-H** | not started | **Compute `prec_at_recall80` for the transformer.** It is empty for all 15 transformer rows. | `transformer` (fable-5) | It is the only metric that compares RF vs transformer at a matched operating point. Without it §2.3 cannot be settled. |
 | **P0-I** | not started | **Recompute feature importance train-side** (OOB or training-fold CV) and write it as a separate, clearly-labelled column/table. Mark `mean_abs_shap` as diagnostic-only. | `explain` (opus-4-8) | E-00 cannot prune without it. See §2.5. |
-| **P0-J** | not started | **Test the sampling-regime hypothesis:** non-missing rate of `hab_any_prior_7d`/`_14d`, train vs test, per horizon. One query. | `validation` (opus-4-8) | Confirms or kills the single mechanism that would explain §2.2 + §2.4 + §2.5 at once. |
+| **P0-J** | **DONE** | **Test the sampling-regime hypothesis:** non-missing rate of `hab_any_prior_7d`/`_14d`, train vs test, per horizon. One query. **CONFIRMED** via the `==1` rate (~1.5–2× denser in test at every horizon; non-missing is 100% both eras — features are 0-imputed). See `reports/results/P0-J_sampling_regime.md`. | `validation` (opus-4-8) | Confirms or kills the single mechanism that would explain §2.2 + §2.4 + §2.5 at once. |
 
 **P0-A and P0-B will move the baseline.** Expect the temporal number to shift slightly and the
 spatial number to drop. Re-freeze §5 afterward. This is the point: a baseline measured on a
@@ -383,7 +383,7 @@ A-DOC (opus-4-8) appends one row per experiment. Never rewrite history; supersed
 | P0-B | Spatial buffer | not started | | | | | | | | | |
 | P0-H | Transformer p@r80 | not started | | | | | | | | | |
 | P0-I | Train-side importance | not started | | | | | | | | | |
-| P0-J | Sampling-regime test | not started | | | | | | | | | |
+| P0-J | Sampling-regime test | DONE | | | | | | | | CONFIRMED | — |
 | — | **BASELINE re-frozen** | pending | | | | | | | | | |
 | S0 | Effective event count | not started | | | | | | | | | |
 | S0b | TabPFN v2 | not started | | | | | | | | | |
