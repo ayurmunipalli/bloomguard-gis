@@ -128,6 +128,14 @@ Not "RF beats the transformer." Fix by either giving the transformer wind (retra
 reporting the pre-wind matched comparison as the head-to-head. **Author decision — this changes a
 headline claim.**
 
+**RESOLVED by P0-C (2026-07): TIE.** Block-bootstrap 95% CI on the RF−transformer PR-AUC delta
+(`.pt`-faithful per-row predictions, re-frozen splits): **H=7 temporal −0.0018 [−0.037, +0.027];
+H=14 +0.0114 [−0.023, +0.033] — both include 0.** The RF resolves a small win only at H=1/H=5. So
+the defensible claim above is now CI-backed: **it is a tie at the primary and long horizons, not an
+RF win.** (Separately, P0-C finds the wind effect NULL at H=7 — small resolved + at H=1/H=14 — so
+"the wind effect was itself declared null" is now CI-confirmed at H=7.) See §6 and
+`reports/results/P0-C_bootstrap_cis.md`.
+
 ### 2.4 The horizon arms are not comparable
 
 Total rows per horizon: **H=1 7,791 · H=3 4,765 · H=5 6,151 · H=7 23,751 · H=14 23,889.**
@@ -193,7 +201,7 @@ prevalence/sampling-density shift to disclose, not a defect a supervision fix wo
 |---|---|---|---|---|
 | **P0-A** | **DONE** | **Add an H-day embargo** around the temporal boundary: no training row's label date may fall in the test feature-date range. Re-run A7. **Done: H=7 temporal PR-AUC 0.5022→0.5008 (Δ −0.0014). R-SPLIT PASS.** | `modeling` (fable-5), gate R-SPLIT | Every baseline number is measured without it. |
 | **P0-B** | **DONE** | **Add a spatial buffer** to the block holdout: drop train cells within ≥1 neighbourhood radius of any test cell. **Done at 20 km (default); residual test-cells-within-R = 0. R-SPLIT PASS.** **HARD BLOCK ON E-01: E-01 is BLOCKED until `config split_repair.spatial_buffer_m >= 30000` AND A7 re-run under it — E-01's ring-2 features (~20 km) reach a 20 km buffer and reopen the spatial leak.** | `modeling`, gate R-SPLIT | **E-01 cannot run without it.** |
-| **P0-C** | not started | **Block-bootstrap CIs on the frozen baseline** (§5), n=1000, blocks = contiguous time segments. | `validation` (opus-4-8) | Without them no Δ in §4 is interpretable. |
+| **P0-C** | **DONE** | **Block-bootstrap CIs on the frozen baseline**, n=1000, blocks = 30-day contiguous time segments (justified vs label autocorrelation). Re-verdicted 3 claims: **RF↔transformer TIE** at H=7/14 (CI incl. 0), **wind NULL** at H=7 (small resolved + at H=1/14), **bio-optical NULL at matched recall / NEGATIVE on PR-AUC at H=5/14**. See `reports/results/P0-C_bootstrap_cis.md`. | `validation` (opus-4-8) | Without them no Δ in §4 is interpretable. |
 | **P0-D** | **DONE** | **Deleted `head_to_head_comparison.csv`** (stale pre-wind RF numbers that disagreed with `model_results.csv`). | `modeling` | Stale numbers get cited. |
 | **P0-E** | **DONE** | **Merged the bio-optical branch into `main` and pushed to the remote** (`21320f7`). | lead | A documented negative result exists only on one laptop. |
 | **P0-F** | not started | **Fix `IS_PLACEHOLDER_ROW` AND→OR** at `R/05_environmental_features.R:773`. Re-run A5→A6. No retrain. | `env-features` | Row-level honesty flag silently zeroed once wind went real; precip/salinity are still placeholders. |
@@ -398,6 +406,35 @@ H=7 temporal confusion (post-embargo, A7-equivalent via `R/07c_split_repair.R`):
 train-rows dropped: H=1:1 · H=3:3 · H=5:12 · H=7:23 · H=14:49. Test sets unchanged (embargo drops
 only training rows), so persistence and chl-only reference numbers are unchanged / near-unchanged.
 
+**P0-C · block-bootstrap 95% CIs (blocks = 30-day contiguous time segments, n=1000).** Block length
+justified against same-cell label autocorrelation (0.66 at ≤7 d → 0.08 by 22–28 d; decorrelates by
+~3–4 weeks); stable to L=14/60. Full detail: `reports/results/P0-C_bootstrap_cis.md`,
+`outputs/tables/bootstrap_cis_pC.csv`.
+
+| H | PR-AUC [95% CI] | p@r80 [95% CI] |
+|---|---|---|
+| 1 | 0.6437 [0.537, 0.718] | 0.5000 [0.371, 0.610] |
+| 3 | 0.6544 [0.548, 0.754] | 0.4957 [0.357, 0.649] |
+| 5 | 0.6724 [0.535, 0.763] | 0.4652 [0.268, 0.631] |
+| **7** | **0.5008 [0.388, 0.590]** | **0.2750 [0.173, 0.389]** |
+| 14 | 0.4589 [0.330, 0.551] | 0.2295 [0.140, 0.335] |
+
+**Three claims re-verdicted against §7.2 (CIs on paired deltas):**
+- **RF vs transformer — TIE (NULL) at H=7/H=14 temporal.** RF−transformer PR-AUC: H=7 −0.0018
+  [−0.037, +0.027], H=14 +0.0114 [−0.023, +0.033] — CIs include 0. RF resolves a small win only at
+  H=1/H=5. Confirms §2.3: "ties or beats, within noise at most horizons," **not** "RF beats the
+  transformer."
+- **ERA5 wind — NULL at H=7 (primary), small resolved positive at H=1 & H=14.** RF(wind)−RF(no-wind)
+  PR-AUC: H=7 +0.0051 [−0.006, +0.018] NULL; H=1 +0.0123 [+0.003, +0.021] and H=14 +0.0145 [+0.005,
+  +0.025] exclude 0. Was UNRESOLVED (no CI); now resolved — not a WIN by §7.2, but not uniformly
+  null; keep it (never hurts).
+- **Bio-optical — NULL at matched recall; NULL-to-NEGATIVE on PR-AUC. Third negative result
+  settled.** p@r80 delta CI includes 0 at every horizon (H=7 −0.0022 [−0.028, +0.028]); the
+  pre-repair +0.0037 does not survive. PR-AUC delta NEGATIVE at H=5 (−0.026 [−0.044, −0.003]) and
+  H=14 (−0.018 [−0.036, −0.003]). **Bio-optical never improves the model at any operating point.**
+- *Bonus (tightens §2.2): RF−persistence PR-AUC at H=7 temporal +0.048 [−0.034, +0.100] is NULL —
+  the RF's H=7 PR-AUC edge over persistence is within noise; resolved only at H=5/H=14.*
+
 **Note the train/test prevalence shift:** test prevalence is ~1.6× train at every horizon, because
 the 2016 cutoff holds out the post-2015 HABSOS intensive-sampling era. The temporal split is
 therefore also a **sampling-regime shift**, not only a time shift. Real, and arguably the honest
@@ -422,12 +459,13 @@ A-DOC (opus-4-8) appends one row per experiment. Never rewrite history; supersed
 | ID | Experiment | Status | H=7 PR-AUC | Δ | 95% CI | H=14 PR-AUC | Δ | Beats pers. @r80? | FP conc. | Verdict | Gates |
 |----|-----------|--------|-----------|---|--------|-------------|---|---|---|---------|-------|
 | — | **BASELINE (RF, pre-embargo)** | superseded | 0.5022 | — | *P0-C* | 0.4587 | — | ✓ (0.276 vs 0.215) | 19× | — | conditional |
-| P0-A | Temporal embargo | DONE | 0.5008 | −0.0014 | *P0-C* | 0.4589 | +0.0002 | | | apparatus fix | R-SPLIT: PASS |
+| P0-A | Temporal embargo | DONE | 0.5008 | −0.0014 | [0.388, 0.590] | 0.4589 | +0.0002 | | | apparatus fix | R-SPLIT: PASS |
 | P0-B | Spatial buffer | DONE | — | — | | — | — | | | apparatus fix (spatial H=7 0.663→0.617) | R-SPLIT: PASS |
+| P0-C | Block-bootstrap CIs | DONE | 0.5008 | — | [0.388, 0.590] | 0.4589 | — | | | RF↔tf TIE; wind NULL@H7; bio NULL@p@r80 | — |
 | P0-H | Transformer p@r80 | not started | | | | | | | | | |
 | P0-I | Train-side importance | not started | | | | | | | | | |
 | P0-J | Sampling-regime test | DONE | | | | | | | | REJECTED | — |
-| — | **BASELINE re-frozen (RF, post-embargo+buffer)** | frozen | 0.5008 | — | *P0-C* | 0.4589 | — | ✓ (0.275 vs 0.215) | 19× | — | R-SPLIT: PASS |
+| — | **BASELINE re-frozen (RF, post-embargo+buffer)** | frozen | 0.5008 | — | [0.388, 0.590] | 0.4589 | — | ✓ (0.275 vs 0.215) | 19× | — | R-SPLIT: PASS |
 | S0 | Effective event count | not started | | | | | | | | | |
 | S0b | TabPFN v2 | not started | | | | | | | | | |
 | E-00 | Feature pruning (OOB) | blocked P0-I | | | | | | | | | |
