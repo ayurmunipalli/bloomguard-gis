@@ -280,13 +280,22 @@ feature set (**with wind, for parity — §2.3**) and compare the gap before vs 
 Either outcome is a paper section. Cost: one re-run.
 
 ### E-01 · Spatial-lag features `[HIGHEST PRIORITY — blocked on buffer≥30km, E-00]` — `datacube` + `modeling`
-**DONE (ring-1 only, option c) — verdict NULL. See `reports/results/E-01a_spatial_lag.md`.**
-E-01a built ring-1 (queen, ~10 km) neighbour features on the current 20 km buffer (which
-gate-passes for ring-1 reach: 14.14 km < 20 km; R6 + R-SPLIT PASS). **Every temporal ΔPR-AUC CI
-includes 0** (H=7 −0.0039 [−0.017, +0.009]; H=14 +0.0012 [−0.019, +0.018]); no advection signature
-(flat-to-negative across horizons); not SUSPECT. Mechanism: neighbours are unobserved at T for ~1
-in 5 rows (median `nbr_count`=2/8) — same-date aggregation can't carry the advection signal.
-**Ring-2 not revisited** (ring-1 showed no real signal); E-01b not pursued.
+**DONE (ring-1, option c) — verdict NULL, but a REAL sub-threshold signal. See
+`reports/results/E-01a_spatial_lag_corrected.md`.** ⚠️ The first E-01a run was **INVALID** — it
+built neighbour features from the label-conditioned `model_dataset.parquet` (0.24% of the satellite
+grid, median 2/8 neighbours) and produced an artifact null. **Corrected re-run** (`R/e01a_spatial_lag_v2.R`)
+uses the **full-grid** `satellite_features.parquet` with cloud-robust trailing-8-day-clear neighbour
+levels → **97.3% coverage, median 6/8**. Clean attribution via an adopted-only control on the same
+`dt` (row-order drift negligible, ∓0.001–0.006).
+- **Temporal ΔPR-AUC all CIs include 0 → NULL** (H=7 **+0.0103 [−0.001, +0.020]** near-miss; H=14
+  +0.0063 [−0.007, +0.018]); not SUSPECT. Fails the WIN rule (needs ≥+0.02, CI excludes 0).
+- **But real signal:** on the better-powered **random** split, H=7 (+0.016 [+0.004, +0.031]) and
+  H=14 (+0.016 [+0.002, +0.033]) **exclude 0**, concentrated at the advection horizons (H=1 not
+  significant) — the predicted signature. **"Spatial structure is unrecoverable" is retracted:** it
+  is weakly recoverable, just under the noise floor on the honest split.
+- R6 PASS (T-only trailing window); R-SPLIT PASS on the direct check (widen buffer to ≥25 km before
+  trusting any future ring-1 WIN — conservative rule marginal at diagonal reach; moot for a NULL).
+- **E-01b (upstream-weighted) is now arguable** — ring-1 shows the advection signal it targets.
 
 **Ring-2 (if ever revisited) HARD BLOCK — do not start until `config.yaml
 split_repair.spatial_buffer_m >= 30000` AND A7 is re-run under it. Ring-2 features (~20 km) reach a
@@ -382,8 +391,11 @@ binary derived; A-DOC note below**). Adopted features, repaired splits.
   ordered-forest P(class≥3) is NULL at every horizon (H=7 −0.0006 [−0.005, +0.003]) — structural, it
   reproduces the binary model; multiclass P(3)+P(4) is NEGATIVE at every horizon (H=7 −0.0197 [−0.036,
   −0.002]) — thresholding back from a 5-class objective costs binary skill. **The reframe does not
-  lift the binary forecast — fifth negative, bounding the problem at label density.** No leakage
-  SUSPECT.
+  lift the binary forecast.** No leakage SUSPECT. *(Negatives count corrected: this is the **fourth**
+  problem-bounding negative — bio-optical, wind, and E-06's two binary derivations — not the fifth.
+  The earlier "fifth" counted the E-01a spatial-lag null, which was an **artifact** (wrong source
+  table); corrected E-01a′ shows a real sub-threshold advection signal and does **not** bound the
+  problem. See `reports/results/E-01a_spatial_lag_corrected.md`.)*
 - **Mechanism:** middle classes (1 "very low", 2 "low") are essentially unlearnable (recall ~0 at
   H=7); only background and the old-positive region carry signal, so the extra gradient is where the
   features cannot separate.
@@ -521,8 +533,9 @@ A-DOC (opus-4-8) appends one row per experiment. Never rewrite history; supersed
 | S0b | TabPFN v2 | not started | | | | | | | | | |
 | E-00 | Feature pruning (OOB) | blocked P0-I | | | | | | | | | |
 | E-00b | Transformer re-run, pruned | blocked E-00 | | | | | | | | | |
-| E-01a | Spatial lag (ring-1, opt. c) | DONE | 0.4969 | −0.0039 | [−0.017, +0.009] | 0.4601 | +0.0012 [−0.019,+0.018] | — | — | **NULL** (all temporal CIs incl. 0; no advection signature) | R6: PASS · R-SPLIT: PASS |
-| E-01b | Spatial lag (upstream) | not pursued (E-01a NULL) | | | | | | | | | |
+| E-01a | Spatial lag (ring-1) | **VOID — wrong source table** | ~~0.4969~~ | ~~−0.0039~~ | | | | | | **INVALID** — neighbour features self-joined the label-conditioned model_dataset (0.24% coverage, median 2/8), not the full-grid satellite source. Artifact null. Superseded by E-01a′. | — |
+| E-01a′ | Spatial lag (ring-1, full-grid) | DONE (corrected) | 0.5102 | +0.0103 | [−0.001, +0.020] | 0.4656 | +0.0063 [−0.007,+0.018] | — | — | **NULL** on temporal (H=7 near-miss); real sub-threshold advection signal — significant on random at H=7/14 (+0.016 each). Coverage 97.3% (median 6/8). Spatial structure weakly recoverable, "unrecoverable" retracted. | R6: PASS · R-SPLIT: PASS |
+| E-01b | Spatial lag (upstream) | arguable (E-01a′ shows real signal) | | | | | | | | | |
 | E-02 | GBDT + AUPRC + calib | not started | | | | | | | | | |
 | E-03 | Persistence↔tree cascade | blocked E-02 | | | | | | | | | |
 | E-04a | Bio-opt flags as booleans | not started | | | | | | | | | |

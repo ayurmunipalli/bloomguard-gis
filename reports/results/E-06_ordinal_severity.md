@@ -35,8 +35,11 @@ scores its ordering); and it optimizes a 5-class-balanced objective, not the bin
 - **Multiclass → NEGATIVE** at every horizon (CI excludes 0, Δ<0; H=7 −0.0197 [−0.036, −0.002]).
   Thresholding back from a 5-class-balanced model **costs** binary skill — capacity spent separating
   intermediate classes dilutes the class-3 boundary.
-- **This is the fifth negative result, bounding the problem at label density:** even a denser target
-  does not lift the binary daily-exceedance forecast at H=7. `p@r80` tells the same story (ordered
+- **This is the fourth problem-bounding negative (bio-optical, wind, and E-06's two binary
+  derivations), bounding the problem at label density:** even a denser target does not lift the
+  binary daily-exceedance forecast at H=7. *(Corrected from "fifth": the earlier count included the
+  E-01a spatial-lag null, which was an artifact of reading the wrong source table; corrected E-01a′
+  shows a real sub-threshold advection signal and is not a problem-bounding negative.)* `p@r80` tells the same story (ordered
   ≈0, multiclass negative).
 
 **No leakage SUSPECT.** No positive Δ anywhere exceeds +0.05 (none even excludes 0 positively). The
@@ -75,7 +78,8 @@ region, and category accuracy is inflated by the dominant background class (0). 
 comparability only. **We have no true 4-week arm — H=14 is NOT Medina's 4-week horizon.**
 
 ## Verdict (§7.2): **NULL (ordered) / NEGATIVE (multiclass) on the binary — the reframe does not improve the binary forecast.**
-A clean fifth negative that bounds the problem at label density. **But** E-06 is not a dead end: it
+A clean fourth problem-bounding negative that bounds the problem at label density (see the STOP #2
+note above on the corrected count). **But** E-06 is not a dead end: it
 produces a calibrated severity model with real ordinal skill (QWK ~0.52 at H=7) and category accuracy
 near the published SOTA target — a Path-B (severity forecasting) deliverable the binary track never
 had. The middle-class collapse locates the ceiling: severity resolution here is effectively
