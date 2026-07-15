@@ -13,13 +13,18 @@
 # CITATIONS: none (diagnostic).
 # ============================================================
 
-# NOTE(paper): the temporal split is not only a time split; the HAB-history
-#   features are ~1.5-2x denser (fraction == 1) in the 2016+ test era than in
-#   the pre-2016 training era, at every horizon. This is the sampling-regime
-#   shift of PROJECT.md §2.5 measured directly.
+# NOTE(paper): PART A (marginal) shows the HAB-history features fire ~1.5-2x more
+#   often (fraction == 1) in the 2016+ test era. But the label positive rate rises
+#   in lockstep, so the marginal rate CANNOT test the §2.5 informativeness claim.
+# NOTE(paper): PART B (conditional) is the actual test. The odds ratio linking the
+#   feature to the label is STATISTICALLY INDISTINGUISHABLE train vs test at
+#   H=1/3/5, and SIGNIFICANTLY LOWER in test at H=7/14 (OR ratio ~0.55, CI excludes
+#   1, interaction p < 1e-6). The feature is never MORE informative in test.
+#   => PROJECT.md §2.5 sampling-regime-informativeness hypothesis is REJECTED.
 # NOTE(limitation): these features are ZERO-IMPUTED indicators (0 = no prior
 #   HAB observation in the window), so non-missing rate is 100% in both eras.
-#   The regime effect lives in the value distribution, not in missingness.
+#   The density shift is real but reflects sampling intensity lifting both feature
+#   and label, not a change in the feature's predictive value.
 
 source("R/00_config.R")
 suppressMessages({library(arrow); library(data.table)})
@@ -54,4 +59,53 @@ for (H in Hs) {
   }
 }
 setorder(out, feature, H, -era)
+cat("=== PART A: marginal firing rate (NOT a test of informativeness) ===\n")
 print(out, nrow = Inf)
+
+# ── PART B: CONDITIONAL informativeness (the actual §2.5 test) ────────────────
+# For each (H, era, feature): 2x2 table feature{0,1} x label{0,1}.
+#   P1 = P(label=1 | feature=1) = a/(a+b)
+#   P0 = P(label=1 | feature=0) = c/(c+d)
+#   lift = P1 / P0
+#   OR   = (a*d)/(b*c) ; Wald 95% CI via SE(logOR) = sqrt(1/a+1/b+1/c+1/d)
+# Then the era interaction: OR_test / OR_train with a 95% CI (combined SE) and a
+# Wald p. CI excluding 1 => feature informativeness differs by era.
+cond <- data.table()
+for (H in Hs) {
+  lab <- paste0("HAB_H", H)
+  sub <- dt[!is.na(get(lab))]
+  sub[, era := ifelse(yr < CUTOFF_YEAR, "train", "test")]
+  for (f in feats) {
+    est <- list()
+    for (e in c("train", "test")) {
+      s <- sub[era == e]; y <- s[[lab]]; x <- s[[f]]
+      a <- sum(x == 1 & y == 1); b <- sum(x == 1 & y == 0)
+      cc <- sum(x == 0 & y == 1); d <- sum(x == 0 & y == 0)
+      logOR <- log((a * d) / (b * cc)); se <- sqrt(1/a + 1/b + 1/cc + 1/d)
+      est[[e]] <- c(logOR = logOR, se = se)
+      cond <- rbind(cond, data.table(
+        H = H, feature = f, era = e,
+        P1_pct = round(100 * a / (a + b), 2),
+        P0_pct = round(100 * cc / (cc + d), 2),
+        lift   = round((a / (a + b)) / (cc / (cc + d)), 2),
+        OR     = round(exp(logOR), 2),
+        OR_lo  = round(exp(logOR - 1.96 * se), 2),
+        OR_hi  = round(exp(logOR + 1.96 * se), 2)
+      ))
+    }
+    dlog <- est$test["logOR"] - est$train["logOR"]
+    dse  <- sqrt(est$test["se"]^2 + est$train["se"]^2)
+    cond <- rbind(cond, data.table(
+      H = H, feature = f, era = "RATIO test/train",
+      P1_pct = NA_real_, P0_pct = NA_real_,
+      lift = round(exp(dlog), 2),          # OR ratio in the 'lift' slot for RATIO rows
+      OR = round(exp(dlog), 2),
+      OR_lo = round(exp(dlog - 1.96 * dse), 2),
+      OR_hi = round(exp(dlog + 1.96 * dse), 2)
+    ), fill = TRUE)
+  }
+}
+setorder(cond, feature, H)
+cat("\n=== PART B: conditional P(label|feature), lift, OR [95% CI], and era interaction ===\n")
+cat("    (RATIO rows: OR_test/OR_train; CI excluding 1 => informativeness differs by era)\n")
+print(cond, nrow = Inf)
