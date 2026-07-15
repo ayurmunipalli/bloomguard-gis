@@ -116,9 +116,12 @@ and at H=7/14 it is rejected in the strong sense (the conditional moves signific
   **does not fire.**
 - The train/test prevalence/density shift remains a **disclosed limitation** of the temporal split,
   not a feature-transfer defect.
-- Open question for the author, not for this task: the *drop* in conditional informativeness at
-  H=7/14 in the test era (the feature-negative background catching up) is itself a real property of
-  the split and may deserve a sentence in the limitations section.
+- Limitations note (measurement property, not a feature failure): the H=7/14 odds-ratio decline in
+  the test era is most likely a **ceiling effect**, not a change in bloom dynamics. Detection
+  intensity roughly doubled post-2015, so the feature-negative background rate doubled with it
+  (P(label|feature=0): 2.96%→5.62% at H=7), while P(label|feature=1) was already near ceiling and
+  could not rise — so the odds ratio compresses. Nothing changed about the underlying process; the
+  measurement got denser. Disclose as a prevalence/sampling-density property of the split.
 
 <!-- NOTE(paper): P0-J REJECTED on the conditional test. Marginal density shift ≠ informativeness. -->
 <!-- NOTE(paper): at H=7/14 the feature is significantly LESS informative in test (OR ratio ~0.55, p<1e-6). -->

@@ -127,6 +127,11 @@ Methods & techniques / Open questions & caveats.
 9. **Do not cite "Harris et al. 2021, *Harmful Algae* 103:101999."** Appears fabricated; that
    article number belongs to an unrelated cyanobacteria paper. Real comparators: PROJECT.md §8.
 10. **No prose.** Agents write logs, diagnoses, tables, commit messages. The author writes the paper.
+11. **Match the statistic to the claim.** Marginal rates do not test conditional claims;
+    default-threshold metrics do not test skill. Before declaring any finding, state whether the
+    number is marginal or conditional, default-threshold or matched-recall — and whether that is
+    the quantity the claim actually needs. Three apparent findings in this project (persistence
+    beating the RF, bio-optical harming skill, P0-J CONFIRMED) were artifacts of the wrong one.
 
 ---
 

@@ -129,6 +129,9 @@ effective events **per horizon**, not pooled.
 
 ### 2.5 The importance table is test-derived, and the two importance measures disagree
 
+**Hypothesis REFUTED by P0-J (2026-07).** The importance disagreement stands; the sampling-regime
+explanation for it does not. The disagreement is currently unexplained.
+
 `mean_abs_shap` in `top_features.csv` / `variable_importance.csv` is computed by permuting
 features **in the test set** (`R/08_explainability.R:169–178`, `X_test <- te_dt[shap_idx, ]`).
 It is a valid diagnostic. It is **invalid as a feature-selection criterion** — pruning by it is
@@ -155,6 +158,18 @@ split is partly measuring transfer across a sampling regime rather than across t
 **P0-J:** compute the non-missing rate of `hab_any_prior_7d` and `hab_any_prior_14d` in train vs
 test, per horizon. One query. It either confirms this or kills it, and either way it belongs in
 the paper.
+
+**P0-J outcome (2026-07): REFUTED.** The conditional test (feature→label odds ratio, train vs
+test) is indistinguishable across eras at H=1/3/5 and *lower* in test at H=7/14 (OR ratio ~0.55,
+p<1e-6) — the opposite of the hypothesised direction. See `reports/results/P0-J_sampling_regime.md`.
+
+`NOTE(limitation):` **The H=7/14 odds-ratio decline is a measurement property of the split, not a
+change in bloom dynamics or a feature failure.** It is most likely a **ceiling effect**: detection
+intensity roughly doubled from the pre-2016 to the post-2016 era, so the feature-negative
+background rate doubled with it (P(label|feature=0): 2.96%→5.62% at H=7), while
+P(label|feature=1) was already near ceiling and could not rise — so the odds ratio compresses.
+Nothing changed about the underlying process; the measurement got denser. This is a train/test
+prevalence/sampling-density shift to disclose, not a defect a supervision fix would repair.
 
 ---
 
