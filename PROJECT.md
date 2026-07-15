@@ -54,10 +54,18 @@ and they never propagated to any summary document:
   every horizon. Cost: 8–17 cells / 200–1,960 rows dropped per horizon.
 - **Spatial split has a prevalence confound (unchanged — not a P0 target).** The holdout
   deterministically isolates Collier County (block `12_115`), the dominant hotspot: 11.4% positive
-  vs 8.4% in the random test set (1.35×). **Post-buffer, spatial H=7 PR-AUC 0.663 → 0.6165 now sits
-  *below* random (0.631) — the earlier spatial>random gap was border leakage, not geographic
-  generalisation, which P0-B confirms.** Still a single fixed geography — n=1, no rotation — so the
+  vs 8.4% in the random test set (1.35×). Still a single fixed geography — n=1, no rotation — so the
   prevalence confound and lack of rotation remain open limitations.
+
+**PAPER CLAIM CHANGED — spatial generalization (A-DOC, propagate to `design_rationale.md`).**
+Post-P0-B, spatial H=7 PR-AUC (**0.617**) sits *below* random resampling (**0.631**). The earlier
+spatial>random gap (0.663 vs 0.631) was **border leakage**, not geographic robustness. **Anywhere
+the model is described as "generalizing well spatially," replace with: "geographic transfer to a
+held-out region is harder than random resampling; earlier apparent spatial robustness was inflated
+by border adjacency, now corrected."** This is the honest and *expected* direction — unseen
+geography should be harder than seen — so frame it as a **strengthened** result (the apparatus is
+now trustworthy), **not** a regression. The spatial number was never the headline (the temporal
+split is); this makes the spatial story correct rather than optimistic.
 
 **Consequence:** the temporal split is the headline honest number, and it is now honest *with the
 embargo* (P0-A landed; Δ = −0.0014, so the prior number stands). **E-01's spatial buffer now
@@ -183,8 +191,8 @@ prevalence/sampling-density shift to disclose, not a defect a supervision fix wo
 
 | ID | Status | Task | Owner | Why it blocks |
 |---|---|---|---|---|
-| **P0-A** | not started | **Add an H-day embargo** around the temporal boundary: no training row's label date may fall in the test feature-date range. Re-run A7. | `modeling` (fable-5), gate R-SPLIT | Every baseline number is measured without it. |
-| **P0-B** | not started | **Add a spatial buffer** to the block holdout: drop train cells within ≥1 neighbourhood radius of any test cell. Report how many rows this costs. | `modeling`, gate R-SPLIT | **E-01 cannot run without it.** |
+| **P0-A** | **DONE** | **Add an H-day embargo** around the temporal boundary: no training row's label date may fall in the test feature-date range. Re-run A7. **Done: H=7 temporal PR-AUC 0.5022→0.5008 (Δ −0.0014). R-SPLIT PASS.** | `modeling` (fable-5), gate R-SPLIT | Every baseline number is measured without it. |
+| **P0-B** | **DONE** | **Add a spatial buffer** to the block holdout: drop train cells within ≥1 neighbourhood radius of any test cell. **Done at 20 km (default); residual test-cells-within-R = 0. R-SPLIT PASS.** **HARD BLOCK ON E-01: E-01 is BLOCKED until `config split_repair.spatial_buffer_m >= 30000` AND A7 re-run under it — E-01's ring-2 features (~20 km) reach a 20 km buffer and reopen the spatial leak.** | `modeling`, gate R-SPLIT | **E-01 cannot run without it.** |
 | **P0-C** | not started | **Block-bootstrap CIs on the frozen baseline** (§5), n=1000, blocks = contiguous time segments. | `validation` (opus-4-8) | Without them no Δ in §4 is interpretable. |
 | **P0-D** | **DONE** | **Deleted `head_to_head_comparison.csv`** (stale pre-wind RF numbers that disagreed with `model_results.csv`). | `modeling` | Stale numbers get cited. |
 | **P0-E** | **DONE** | **Merged the bio-optical branch into `main` and pushed to the remote** (`21320f7`). | lead | A documented negative result exists only on one laptop. |
@@ -263,7 +271,14 @@ feature set (**with wind, for parity — §2.3**) and compare the gap before vs 
 
 Either outcome is a paper section. Cost: one re-run.
 
-### E-01 · Spatial-lag features `[HIGHEST PRIORITY — blocked on P0-B, E-00]` — `datacube` + `modeling`
+### E-01 · Spatial-lag features `[HIGHEST PRIORITY — blocked on buffer≥30km, E-00]` — `datacube` + `modeling`
+**HARD BLOCK — do not start until `config.yaml split_repair.spatial_buffer_m >= 30000` AND A7 is
+re-run under it. E-01's ring-2 features (~20 km) reach a 20 km buffer and reopen the spatial leak.**
+The current buffer is 20 km (P0-B default), which equals ring-2 reach — a ring-2 neighbour feature
+would pull from a test-adjacent cell straight across the buffer. Widen to ≥ 30 km (ring radius +
+1 cell), re-run A7, re-freeze, and only then build E-01 features. A large spatial gain measured on
+a 20 km buffer is leakage, not skill.
+
 **Hypothesis.** The per-cell design discards spatial coherence. At H=7/14 a cell's risk depends
 more on what is advecting *toward* it than on its own state. This is also the only region where
 the RF clearly beats persistence (§2.2), so it is the right place to push.
@@ -417,8 +432,8 @@ A-DOC (opus-4-8) appends one row per experiment. Never rewrite history; supersed
 | S0b | TabPFN v2 | not started | | | | | | | | | |
 | E-00 | Feature pruning (OOB) | blocked P0-I | | | | | | | | | |
 | E-00b | Transformer re-run, pruned | blocked E-00 | | | | | | | | | |
-| E-01a | Spatial lag (isotropic) | blocked E-00 (+widen buffer ≥30km) | | | | | | | | | |
-| E-01b | Spatial lag (upstream) | blocked E-00 (+widen buffer ≥30km) | | | | | | | | | |
+| E-01a | Spatial lag (isotropic) | **blocked: buffer≥30km** (also E-00) | | | | | | | | | |
+| E-01b | Spatial lag (upstream) | **blocked: buffer≥30km** (also E-00) | | | | | | | | | |
 | E-02 | GBDT + AUPRC + calib | not started | | | | | | | | | |
 | E-03 | Persistence↔tree cascade | blocked E-02 | | | | | | | | | |
 | E-04a | Bio-opt flags as booleans | not started | | | | | | | | | |
