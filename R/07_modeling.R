@@ -264,32 +264,36 @@ impute_with_flag <- function(train_dt, test_dt, feat_cols) {
 
 # ── METRIC HELPERS ─────────────────────────────────────────────────────────
 roc_auc_fn <- function(prob, actual) {
-  # Area under ROC curve (trapezoidal)
+  # ROC-AUC = Mann-Whitney U with ties credited 0.5 (rank mid-ranks) — order-independent.
+  # NOTE(paper): D-20 fix. The prior trapezoidal row-walk was tie-order-dependent and
+  #              biased persistence (a binary {0,1} score) upward. For a binary score this
+  #              rank form equals (sensitivity + specificity)/2 exactly. For a continuous
+  #              (tie-free) score it is identical to the trapezoidal AUC to machine precision.
   if (length(unique(actual)) < 2) return(NA_real_)
-  ord  <- order(prob, decreasing = TRUE)
-  act  <- actual[ord]
-  tp   <- cumsum(act)
-  fp   <- cumsum(1L - act)
-  tpr  <- tp / sum(act)
-  fpr  <- fp / sum(1L - act)
-  sum(diff(fpr) * (tpr[-length(tpr)] + tpr[-1]) / 2, na.rm = TRUE)
+  n_pos <- sum(actual == 1L)
+  n_neg <- sum(actual == 0L)
+  if (n_pos == 0L || n_neg == 0L) return(NA_real_)
+  r <- rank(prob)                       # mid-ranks credit ties 0.5
+  (sum(r[actual == 1L]) - n_pos * (n_pos + 1) / 2) / (n_pos * n_neg)
 }
 
 pr_auc_fn <- function(prob, actual) {
-  # Area under Precision-Recall curve (trapezoidal, interpolation by recall)
-  # NOTE(cite): PR-AUC preferred over ROC-AUC for imbalanced data (Davis & Goadrich 2006).
+  # PR-AUC = average precision: sum_k (R_k - R_{k-1}) * P_k over DISTINCT score thresholds.
+  # NOTE(cite): step interpolation, NOT linear — Davis & Goadrich (2006) show linear
+  #             interpolation in PR space is over-optimistic. Tie-collapsed => order-independent
+  #             (D-20). Continuous scores shift by <=0.0013 vs the old trapezoidal (expected,
+  #             not a tie artifact); binary persistence is corrected.
   if (length(unique(actual)) < 2) return(NA_real_)
   ord  <- order(prob, decreasing = TRUE)
+  p    <- prob[ord]
   act  <- actual[ord]
   tp   <- cumsum(act)
   fp   <- cumsum(1L - act)
-  prec <- tp / (tp + fp)
-  rec  <- tp / sum(act)
-  # Handle first point (threshold = max_prob → recall usually starts at 1/N_pos)
-  rec_aug  <- c(0, rec)
-  prec_aug <- c(prec[1], prec)
-  sum(diff(rec_aug) * (prec_aug[-length(prec_aug)] + prec_aug[-1]) / 2,
-      na.rm = TRUE)
+  keep <- c(which(diff(p) != 0), length(p))   # last row of each tie block
+  prec <- tp[keep] / (tp[keep] + fp[keep])
+  rec  <- tp[keep] / sum(act)
+  rec_prev <- c(0, rec[-length(rec)])
+  sum((rec - rec_prev) * prec)
 }
 
 # NOTE(paper): precision-at-recall-0.80 — a threshold-free operating-point summary
@@ -301,13 +305,18 @@ pr_auc_fn <- function(prob, actual) {
 #              without passing through a NA-precision point — reported as NA, not 0, to avoid
 #              implying a real operating point exists when it doesn't).
 precision_at_recall_fn <- function(prob, actual, target_recall = 0.80) {
+  # Tie-collapsed: evaluate the PR curve only at DISTINCT score thresholds (D-20). The prior
+  # row-walk picked an arbitrary interior row inside a tie block, inflating p@r80 for the
+  # binary persistence score.
   if (length(unique(actual)) < 2) return(NA_real_)
   ord  <- order(prob, decreasing = TRUE)
+  p    <- prob[ord]
   act  <- actual[ord]
   tp   <- cumsum(act)
   fp   <- cumsum(1L - act)
-  prec <- tp / (tp + fp)
-  rec  <- tp / sum(act)
+  keep <- c(which(diff(p) != 0), length(p))
+  prec <- tp[keep] / (tp[keep] + fp[keep])
+  rec  <- tp[keep] / sum(act)
   hit  <- which(rec >= target_recall)
   if (length(hit) == 0) return(NA_real_)
   round(prec[hit[1]], 4)

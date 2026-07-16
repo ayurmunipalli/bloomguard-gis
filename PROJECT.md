@@ -193,6 +193,48 @@ P(label|feature=1) was already near ceiling and could not rise — so the odds r
 Nothing changed about the underlying process; the measurement got denser. This is a train/test
 prevalence/sampling-density shift to disclose, not a defect a supervision fix would repair.
 
+### 2.6 The persistence baseline metrics were inflated by a tie-handling bug in the scorer (R-PROV, 2026-07-16)
+
+Two persistence baselines disagreed: `model_results.csv` vs `predictions_pC.parquet`, on temporal
+ROC-AUC by 0.021–0.034 at every horizon (H=7: 0.8213 vs 0.7873). RF matched to 4 dp; only
+persistence drifted. Established with commands (see `~/Desktop/bloomguard_persistence.md`):
+
+- **Same rows, same definition.** Running the authoritative trapezoidal `roc_auc_fn`
+  (`R/07_modeling.R:266`) on the *dump's* rows reproduces `model_results.csv` **exactly at all 15
+  split×horizon cells**. Both paths define persistence identically as `prob = HAB at T`, a **binary
+  {0,1}** score (`R/07_modeling.R:365`, `R/07d_pC_predictions.R:89`). Row-set and definition are
+  ruled out.
+- **The defect is tie handling.** `roc_auc_fn`/`pr_auc_fn`/`precision_at_recall_fn` walk the
+  score-sorted rows one at a time; on a tied score the within-tie row order changes the result
+  (shuffle test, H=7: ROC 0.7806–0.7904, PR 0.46–0.49). The natural-order value (0.8213) is a
+  non-reproducible artifact. For a binary score the defensible AUC is unique:
+  Mann-Whitney with ties=0.5 **= (sens+spec)/2 exactly = 0.7873**.
+- **CANONICAL = tie-safe** (ROC: Mann-Whitney U ties-0.5; PR: tie-collapsed average precision;
+  p@r80: tie-collapsed). `model_results.csv` persistence rows (all 15) were **patched in place**
+  on 2026-07-16 to canonical values (`roc_auc`, `pr_auc`, `prec_at_recall80` only; threshold-based
+  columns and all RF/chl_only/transformer rows untouched — those scores are continuous, so
+  tie-safe and trapezoidal agree). `best_model.rds` md5 unchanged (no retrain).
+
+**Headline verdict changes (canonical block bootstrap, seed 42, L=30d, n=1000):**
+- **RF-vs-persistence PR-AUC at H=7 temporal FLIPS NULL → WIN**: +0.066 [+0.021, +0.109],
+  excludes 0. The prior NULL (+0.048 [−0.034, +0.100]) was the buggy trapezoidal estimator; a
+  same-machinery re-bootstrap reproduces that NULL exactly, isolating the estimator as the cause.
+  **H=3 also flips NULL → WIN** (+0.074 [+0.009, +0.134]). RF now beats persistence on PR at
+  H=3/5/7/14; NULL only at H=1.
+- **§2.2 "persistence beats RF at H=1 on p@r80" is an artifact.** Canonical persistence p@r80 H=1
+  temporal = 0.1575 (was 0.5192), vs RF 0.50 — **RF beats persistence on p@r80 at every
+  horizon.** The §2.2 persistence p@r80 / PR-AUC column is stale; use the patched `model_results.csv`.
+- **RF-vs-persistence ROC positive is UNAFFECTED** — Gate 0 already used the canonical Mann-Whitney
+  estimator (d_rf_pers_roc H=7 = +0.0487 [+0.0248, +0.0749]).
+
+**Left for a follow-up (NOT yet done, uncommitted):** (a) `bootstrap_cis_pC.csv` `d_rf_pers` (PR)
+rows still hold the buggy trapezoidal deltas — re-run `R/07e_pC_bootstrap.R` with the tie-safe
+scorer (no retrain; scores the dump); (b) `R/07_modeling.R` `roc_auc_fn`→Mann-Whitney and
+`pr_auc_fn`→average-precision on the next authorized retrain (would leave continuous-score rows
+unchanged within rounding); (c) §2.2's table numbers. **Bias note:** canonical persistence is
+*lower*, which flatters the RF — it was adopted on correctness (order-independence proven, tie=0.5
+is the unique binary AUC), not because it flatters.
+
 ---
 
 ## 3. P0 — prerequisites. Nothing in §5 runs until these land.
