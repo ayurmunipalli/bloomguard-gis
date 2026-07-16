@@ -239,6 +239,32 @@ unchanged within rounding); (c) §2.2's table numbers. **Bias note:** canonical 
 *lower*, which flatters the RF — it was adopted on correctness (order-independence proven, tie=0.5
 is the unique binary AUC), not because it flatters.
 
+### 2.7 M1 re-anchored arms — build limitations to carry (R/06b, 2026-07-16)
+
+The re-anchored two-arm datacube (`R/06b_build_arms.R`, D15/D13/D17/D18) is built; these
+`NOTE(limitation)`s are mirrored here per rule 15:
+
+- **R-SPLIT — Arm B spatial buffer must be ≥ 25 km (merge-blocking for Arm B, not yet applied).**
+  Arm B's `log10_max_cells_neighbors_prior_7d` is built from **ring-1 (queen)** cells whose
+  14.14 km diagonal reaches into an adjacent block. `config.yaml split_repair.spatial_buffer_m`
+  is **20 km** — below the ring reach + margin. Per D-11, set it to **≥ 25 km before Arm B's
+  spatial split runs** (the same class of fix the config already notes for E-01 ring-2 at ≥30 km).
+  **Arm A is unaffected** (no neighbour features; 20 km already exceeds the cell reach). The config
+  was NOT bumped here — it is shared with the frozen 07c baseline, so bumping it is a modeling-time
+  decision, not a build-time one. Temporal embargo at the 2016 cutoff is **clean on the new anchors**
+  (255 leaking train rows → 0 after embargo).
+- **Reanalysis provenance.** Wind at re-anchored T comes from the **daily** `era5_checkpoints`, not
+  `environmental_features.parquet` (which is HABSOS-date-only and cannot serve non-HABSOS anchors).
+  In the checkpoints `wind_is_placeholder` is FALSE for all label cells (0%), vs 30.45% in the
+  HABSOS-date env parquet — the daily field covers every anchor cell-date. **CHIRPS precip and SMAP
+  salinity are placeholder (NA) on every arm row** (never landed) — the §2.6/§5 data-honesty
+  disclosure carries into both arms.
+- **Calendar-day slopes are sparse by design (D18).** `_slope_Nd = delta_Nd / N` needs a clear
+  satellite retrieval **exactly** N calendar days before the snap date, so slopes are 26–43%
+  non-null under cloud gaps. This is honest missingness from the full satellite source, **not**
+  starvation — it is the correct behaviour D18 asked for (a per-day rate, not a per-observation one),
+  and is load-bearing under Arm A which has no lags to fall back on.
+
 ---
 
 ## 3. P0 — prerequisites. Nothing in §5 runs until these land.
