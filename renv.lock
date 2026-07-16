@@ -556,6 +556,49 @@
       "Maintainer": "David Meyer <David.Meyer@R-project.org>",
       "Repository": "CRAN"
     },
+    "ecmwfr": {
+      "Package": "ecmwfr",
+      "Version": "2.0.3",
+      "Source": "Repository",
+      "Priority": null,
+      "Depends": [
+        "R (>= 4.2)"
+      ],
+      "Imports": [
+        "httr",
+        "memoise",
+        "getPass",
+        "R6",
+        "keyring",
+        "tools"
+      ],
+      "LinkingTo": [
+        null
+      ],
+      "Suggests": [
+        "rmarkdown",
+        "covr",
+        "xml2",
+        "testthat",
+        "terra",
+        "maps",
+        "ncdf4",
+        "knitr",
+        "rlang",
+        "rstudioapi",
+        "jsonlite"
+      ],
+      "Enhances": [
+        null
+      ],
+      "License": "AGPL-3",
+      "License_is_FOSS": null,
+      "License_restricts_use": null,
+      "OS_type": null,
+      "NeedsCompilation": "no",
+      "Repository": "CRAN",
+      "Type": "source"
+    },
     "glue": {
       "Package": "glue",
       "Version": "1.8.0",
@@ -742,6 +785,37 @@
       "Author": "Hadley Wickham [aut, cre] (ORCID: <https://orcid.org/0000-0003-4757-117X>), Lionel Henry [aut], Posit Software, PBC [cph, fnd] (ROR: <https://ror.org/03wc8by49>)",
       "Maintainer": "Hadley Wickham <hadley@posit.co>",
       "Repository": "CRAN"
+    },
+    "ranger": {
+      "Package": "ranger",
+      "Version": "0.18.0",
+      "Source": "Repository",
+      "Priority": null,
+      "Depends": [
+        "R (>= 3.1)"
+      ],
+      "Imports": [
+        "Rcpp (>= 0.11.2)",
+        "Matrix"
+      ],
+      "LinkingTo": [
+        "Rcpp",
+        "RcppEigen"
+      ],
+      "Suggests": [
+        "survival",
+        "testthat"
+      ],
+      "Enhances": [
+        null
+      ],
+      "License": "GPL-3",
+      "License_is_FOSS": null,
+      "License_restricts_use": null,
+      "OS_type": null,
+      "NeedsCompilation": "yes",
+      "Repository": "CRAN",
+      "Type": "source"
     },
     "renv": {
       "Package": "renv",
