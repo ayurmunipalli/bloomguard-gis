@@ -315,6 +315,36 @@ leaks across the 80/20 draw); it shows the same A−B direction but smaller (arm
 `predictions_arms.parquet` (all 4 models × both splits) and `arms_rf_temporal.rds` are dumped
 (gitignored); `best_model.rds` untouched.
 
+### 2.10 M2b result — the capacity bundle does NOT beat ranger at the floor (R/07h, 2026-07-16)
+
+ONE pre-registered bundle of four changes (LightGBM + prune 178→33 by train-side ranger OOB + monotone
+constraints + AP early-stop; no scale_pos_weight). R-POWER cleared it as a bundle that **cannot
+attribute** the gain to any single change. Temporal split (primary), tie-safe scorer, paired
+block-bootstrap. **NOTE(limitation): 33-feature selection done on the temporal H=7 train fold and
+reused across horizons and for the random split** (temporal is leakage-clean; random is indicative).
+
+- **d_gbdt_vs_rf on PR-AUC (primary) is UNRESOLVED at H=7 — the bundle does not beat the M2a ranger.**
+  Arm A: **−0.008 [−0.037, +0.019]** (|Δ| < the ±0.033 floor; slightly negative). Arm B: −0.018
+  [−0.055, +0.014]. It resolves *positive* only at H=1 (arm_a +0.036, arm_b +0.032) and *negative* for
+  arm_b at H=14 (−0.041). ROC shows a small resolved gain for Arm A (+0.021…+0.025 at all H); **PR and
+  ROC disagree, PR is primary → the pre-registered outcome is UNRESOLVED, and that IS the result.** The
+  capacity-matching hypothesis (178 feats overfit; prune-to-33 recovers skill) is **not supported** at
+  this event count on the honest split. The winning Arm A model is therefore the **M2a ranger**, whose
+  operating envelope is marginally better (recall-0.10 precision 0.550 vs the bundle's 0.525).
+- **Cost of portability is unchanged under the bundle.** d_arm_a_vs_arm_b_gbdt PR H=7 = −0.147
+  [−0.193, −0.106] ≈ the M2a ranger's −0.157. Model class does not move A−B.
+- **Satellite still buys ≈ nothing over the boat data — now with a FAIR baseline (rule 14).**
+  Rebuilt rich-persistence as LightGBM on the 5 lags. d_arm_b_vs_richpers_gbdt PR H=7 = −0.002
+  [−0.040, +0.037], UNRESOLVED (mostly unresolved at every H). Confirms §2.9's finding with the
+  baseline matched to the arm's model class.
+- **What survived pruning is revealing.** Arm A top-33: 15 bio-optical, 12 satellite, 6 static/season,
+  **0 wind**; 16 of the 33 are rolling stats and **0 are calendar-day deltas/slopes** — the sparse D18
+  slopes lost to the denser rolling means. Arm B top-33: the 5 lags occupy ranks 1–4 & 6 (chlor_a rank
+  5), confirming the lags carry Arm B. Monotone constraints applied: Arm A {chlor_a_mean, nflh_mean};
+  Arm B {chlor_a_mean, nflh_mean, log10_max_cells_prior_7d/14d}. `predictions_arms_gbdt.parquet` +
+  `arms_gbdt_temporal.rds` dumped (gitignored); `lightgbm 4.6.0` recorded in renv.lock (narrow);
+  `best_model.rds` untouched.
+
 ---
 
 ## 3. P0 — prerequisites. Nothing in §5 runs until these land.
