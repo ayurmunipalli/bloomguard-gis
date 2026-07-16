@@ -21,11 +21,15 @@ SENS_L   <- c(14L, 60L)    # sensitivity block lengths (H=7 temporal only)
 Q        <- c(0.025, 0.975)
 
 pr_auc_fn <- function(prob, act) {
+  # M0-2/D-20: average precision (tie-collapsed step), NOT linear interpolation
+  # (Davis & Goadrich 2006). Order-independent; corrects binary persistence.
   if (length(unique(act)) < 2) return(NA_real_)
-  o <- order(prob, decreasing=TRUE); a <- act[o]
-  tp <- cumsum(a); fp <- cumsum(1L-a); pr <- tp/(tp+fp); rc <- tp/sum(a)
-  ra <- c(0, rc); pa <- c(pr[1], pr)
-  sum(diff(ra)*(pa[-length(pa)]+pa[-1])/2, na.rm=TRUE)
+  o <- order(prob, decreasing=TRUE); p <- prob[o]; a <- act[o]
+  tp <- cumsum(a); fp <- cumsum(1L-a)
+  keep <- c(which(diff(p) != 0), length(p))
+  prec <- tp[keep]/(tp[keep]+fp[keep]); rc <- tp[keep]/sum(a)
+  rc_prev <- c(0, rc[-length(rc)])
+  sum((rc - rc_prev) * prec)
 }
 p80_fn <- function(prob, act, tr=0.80) {
   if (length(unique(act)) < 2) return(NA_real_)
