@@ -135,8 +135,13 @@ outside the interval by 0.0333. Not marginal. **Rule A — the target is measura
   canonical; `bootstrap_cis_pC.csv`'s `d_rf_pers` PR rows are not. **Two disagreeing artifacts are
   in the tree right now** (P-06, regenerated within one task of being fixed). Scoring the frozen
   dump is not a retrain.
-- **D-04**: `R/05_environmental_features.R:773` — `&` → `|`. Verified present and exactly as the
-  register describes. Re-run A5→A6. No retrain.
+- **D-04**: `R/05_environmental_features.R:775` — `&` → `|`. **PATCHED.** The register's framing
+  (and mine) was wrong: I said "wind is real, so this is FALSE on every row → 0% placeholder." The
+  data says `wind_is_placeholder = 0.3045` — wind is **70% real, not 100%** (`:659`/`:748` set TRUE
+  wherever the ERA5 join left NA). The buggy AND rollup therefore read **30.45%**, not 0%. The fix
+  makes the honest row-level flag **100%**, because CHIRPS and SMAP are placeholders on **every**
+  row. That 100% is itself a disclosure — see the data-honesty note below. No retrain (env rebuild
+  only; `model_dataset.parquet` changed in exactly two columns).
 - **`renv.lock`**: 34 of 176 packages recorded; **`ranger` — the model — is unlocked**. This is not
   drift, the lockfile is decorative. A clean `renv::restore()` does not install the model.
 - **`CLAUDE.md`**: claims commit `21320f7` is "stranded on one laptop" and the remote "lacks the
@@ -190,12 +195,19 @@ Status summary as of 2026-07-16:
 | HABSOS DwC-A v1.5 | **REAL** | 94,810 cell-day rows, 7,523 positive (7.93%). CC0. |
 | MODIS-Aqua L3m (chl, nFLH, Kd490, SST) | **REAL — FINAL** | 5,829/5,829 dates. **Do not re-pull** (~6 h for nothing). |
 | Bio-optical (bbp_443, bbp_s, Rrs_667, Rrs_678) | **REAL** | 27,641,118 rows, 0 duplicates, 0 fabricated. |
-| ERA5 10 m wind | **REAL** | 65,939/65,939 satellite-era rows. |
+| ERA5 10 m wind | **70% REAL** | `wind_is_placeholder = TRUE` on **30.45%** of rows (ERA5 join left NA — coastal/edge cells the ~28 km field did not cover). The ledger's "REAL, 65,939/65,939" **overstates** this, the same way it overstates SMAP ("deliberately skipped" vs. actually deferred). A-DOC must reconcile the ledger to the code, not the reverse. |
 | GEBCO 2026 bathymetry | **REAL** | `depth_m` is model feature **rank 20**. ⚠️ **NON-COMMERCIAL licence** — unresolved, see §11. |
 | TIGER 2023 | **REAL** | `dist_to_shore_m` is feature **rank 18**; 82 county blocks for spatial CV. |
 | **CMEMS SSH** | **TO PULL** → Section H | Duus et al.'s only feature that passes the portability test. `sla`, `adt`, `ugosa`, `vgosa`. 2003-01-01 → 2021-12-31. Credential `~/.copernicusmarine/` — **not** `~/.cdsapirc` (C4). |
 | CHIRPS precipitation | **PLACEHOLDER — parked** | 403 CrowdSec. Re-triggered *by the parallel pull loop itself* (B11 caused it). The feature would be catchment-integrated lagged runoff, not rain-over-ocean-cell. Low priority. |
-| SMAP salinity | **PLACEHOLDER** | OPeNDAP auth deferred. 40–70 km — broad-context only. The master record's "deliberately skipped" is not what the code says. |
+| SMAP salinity | **PLACEHOLDER (100%)** | OPeNDAP auth deferred. 40–70 km — broad-context only. The master record's "deliberately skipped" is not what the code says. |
+
+> **Data-honesty disclosure (surfaced by the D-04 fix).** With the honest OR rollup, `IS_PLACEHOLDER`
+> is TRUE on **100%** of rows — because **CHIRPS precip and SMAP salinity never landed** (placeholder
+> on every row) and **ERA5 wind is missing on 30%**. The modeling docs and the paper's data section
+> must carry this. The register's per-source "REAL" claims describe intent, not the parquet. **Rule:
+> A-DOC reconciles `data/metadata/data_sources.md` against the actual flag columns before M4, and
+> every "REAL" is backed by a `mean(is_placeholder)` command or it is downgraded.**
 
 ---
 
