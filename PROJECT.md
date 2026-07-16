@@ -76,6 +76,10 @@ features re-open the border-adjacency leak. Bump `config.yaml split_repair.spati
 
 ### 2.2 The RF loses to persistence at default thresholds — but this is an operating point, not a skill gap
 
+> **STALE (2026-07-16, M0):** the persistence `p@r80` and `PR-AUC` figures in the table below were
+> computed with the pre-D-20 tie-buggy scorer and are superseded by the patched `model_results.csv`
+> and **§2.6**. Under canonical (tie-safe) scoring, RF beats persistence on p@r80 at **every** horizon.
+
 **Corrected from an earlier draft of this file, which overstated it.** `config.yaml` names
 `recall`, `pr_auc`, `false_negative_rate` as primary. At **default thresholds**, persistence has
 higher recall and lower FNR than the RF at every horizon and split (H=7 temporal: 0.627/0.373 vs

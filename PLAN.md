@@ -1,99 +1,53 @@
 # BloomGuard GIS — Project Plan (`PLAN.md`)
 
-> **This file is the SPEC. It is not the current work plan.**
-> Read it in full before taking any action — its pinned decisions (§2), feature spec (§8),
-> evaluation protocol (§9), and guardrails (§1) are **live and binding**. Do not relitigate §2;
-> changing a pinned decision is an author call, not an agent one.
+> **What this file is.** The decision record: *what did we decide, and why.*
+> **What it is not.** The operating queue — that is `PROJECT.md` (*what are we doing now, and
+> when do we stop*). The agent manual is `CLAUDE.md` (*how do agents behave*).
 >
-> **What has changed since this file was written:**
-> - §3 milestones M1–M3 are **complete**. §11–§12 are **complete**.
-> - §6 per-agent model tags are **superseded by `CLAUDE.md`**.
-> - Current work — the queue, the scoreboard, the pivot triggers, and four corrections to
->   results this file's era produced — lives in **`PROJECT.md`**.
+> **Precedence (D-22 — do not recreate three sources of truth):**
+> `CLAUDE.md` governs agent behaviour · `PLAN.md §2/§8/§9` governs spec · `PROJECT.md` governs
+> the current queue. Where they conflict, the more specific file wins for its own domain, and
+> the conflict is a **stop-and-report event**, not something to resolve locally.
 >
-> **Precedence:** `CLAUDE.md` on how to operate · `PROJECT.md` on what to build next ·
-> this file on what was decided and why.
-
-**Project:** BloomGuard GIS — **forecasting** *Karenia brevis* harmful algal bloom risk _H_ days ahead from the **levels and short-term trends** of satellite/environmental conditions (e.g., a ~10% day-over-day rise in chlorophyll-a), aggregated onto a coastal grid and exported as GIS-ready risk layers. Two modeling stages: **Random Forest first, transformer second.**
-
-**Author context:** Independent high-school research project, mentored by Prof. Jamaal Green (UPenn Weitzman School of Design), targeting an IEEE/URTC-style submission. Realism and honesty matter more than sophistication. A working, well-validated, well-explained grid-based model beats a fragile deep-learning system.
-
-**Scope of the agent team (read this carefully):**
-- **The team's root job is three things:** (1) **source** the data, (2) **clean and spatially engineer** it into the datacube, (3) **code and validate the model.** GIS export supports these.
-- **The author writes the paper.** No agent drafts abstracts, introductions, related-work, or discussion prose. Agents *produce the material the author writes from* — documented techniques, cited data, tables, and figures — but do not write the manuscript.
-- **One dedicated agent (A-DOC) owns citations and technique documentation** across the whole project. See §6.
+> Revision 2026-07-16. Supersedes the 2026-07 revision. Changes to §2 are logged in
+> `reports/decisions.md` per the rule in that section.
 
 ---
 
 ## 0. Agent operating contract (read first)
 
-1. **Follow the milestone gates in §3.** Do not start a milestone until its entry criteria are met. Do not skip ahead because a later task looks interesting.
-2. **Write every output to the exact path given in §6.** Paths are contracts between agents. If you change a path, update this file and tell the lead.
-3. **Leave a methods trail in every file (mandatory — see §0.1).** The author is writing the paper from your notes. Undocumented work is incomplete work.
-4. **Produce a per-agent decision log as a first-class deliverable (mandatory — see §0.2).** Beyond inline notes, every agent writes `reports/agent_logs/<agent>.md` recording every decision it made, every data source it used (with access details), and every method/technique it applied. This is part of your definition-of-done, not an afterthought. A-DOC consumes these logs to build the publication source set (§6, A-DOC).
-4. **Teammates return short summaries to the lead**, not full transcripts: what you did, what file you produced, whether your definition-of-done is met, any blocker.
-5. **Never fabricate data or results.** See §1. This is the one rule that ends the project if broken.
-6. **When blocked on data access, do not stall silently.** Write exact manual steps to the relevant `manual_downloads.md` and continue with a **clearly-labeled** synthetic placeholder (an `IS_PLACEHOLDER = TRUE` column and a loud README note) so downstream agents can build against the schema.
-7. **Definition of "done" is written per agent in §6.** "I wrote some code" is not done. Done = the output file exists at the specified path, passes its quality checks, the inline notes **and** the `reports/agent_logs/<agent>.md` decision log are written, **the paired reviewer (§6.0) has signed off — for data agents A1–A6**, and the summary reports pass/fail on each check.
-8. **Commit at each milestone** via `/commit-push-pr`. Keep secrets, API keys, raw satellite dumps, and model binaries out of git (see `.gitignore` task).
+Unchanged from the previous revision and still binding. Two conventions matter most:
 
-### 0.1 The notes convention (this is how the author writes the paper)
+**0.1 The notes convention.** Every script carries a header block (`FILE / PURPOSE / INPUTS /
+OUTPUTS / TECHNIQUES / CITATIONS`) and inline `NOTE(paper)`, `NOTE(cite)`, `NOTE(limitation)`,
+`NOTE(verify)` tags. This is how the author writes the paper.
 
-Every script and notebook **must** begin with a header block, and every non-obvious step **must** carry an inline note. A-DOC harvests these into the methods log.
+> **Amendment (P-04).** A caveat that lives only in a script header **does not propagate**. Both
+> split defects (D-07 embargo, D-08 buffer) were correctly identified by R-SPLIT, written as
+> `NOTE(limitation)` in `R/07_modeling.R`, and reached no summary document — they were
+> rediscovered months later by reading source. **Any `NOTE(limitation)` must be mirrored into
+> `PROJECT.md` in the same commit that creates it.** A note that is not mirrored is not a note.
 
-```r
-# ============================================================
-# FILE: 02_clean_and_grid.R
-# PURPOSE: Aggregate HABSOS + feature points onto the coastal grid by date.
-# INPUTS:  data/raw/habsos/*.csv, data/processed/study_area_grid.gpkg
-# OUTPUTS: data/processed/gridcell_daily.parquet
-# TECHNIQUES: sf spatial join (st_contains), Albers EPSG:5070 reprojection,
-#             grouped daily aggregation. Ref: Green (2022) RTM gridding.
-# CITATIONS: HABSOS (NOAA NCEI); grid method follows mentor's gulf script.
-# ============================================================
-```
+**0.2 The per-agent decision log.** `reports/agent_logs/<agent>.md`, sections: Decisions · Data
+sources used · Methods & techniques · Open questions / caveats / limitations.
 
-Inline, tag anything the author will need to explain or cite:
-```r
-# NOTE(paper): 10 km cells chosen to exceed MODIS ~4 km L3 pixel size -> avoids
-#              sub-pixel false precision; sits below coarse wind/salinity fields.
-# NOTE(cite):  Albers Equal Area (EPSG:5070) used for metric distances.
-# NOTE(limitation): HABSOS non-detection != true absence; may be unsampled.
-```
-
-Use the same convention in Python/notebooks with `#` comments. A-DOC greps for `NOTE(paper)`, `NOTE(cite)`, and `NOTE(limitation)` — if it isn't tagged, it won't reach the paper.
-
-### 0.2 The per-agent decision log (a required deliverable for every agent)
-
-Inline `NOTE()` tags capture *why a line of code exists*; the decision log captures *the reasoning at the level the paper needs*. Every agent maintains `reports/agent_logs/<agent>.md` and updates it as it works. Minimum structure:
-
-```markdown
-# <agent> — decision & methods log
-## Decisions
-- <decision made> — <why> — <alternatives considered / rejected> — <date>
-## Data sources used
-- <dataset> — <access method / URL> — <version / date accessed> — <license> — <what it fed>
-## Methods & techniques
-- <technique> — <where applied (file/function)> — <parameters chosen> — <citation or "novel/mentor's method">
-## Open questions / caveats / limitations
-- <anything the author must flag in the paper>
-```
-
-Rules: no decision is "obvious" enough to skip; if you chose a parameter (cell size, threshold, window length, hyperparameter), log it and why. This log is checked by your reviewer (§6.0) and harvested by A-DOC — an agent whose log is missing or thin is **not done**.
+**0.3 No prose.** Agents write logs, diagnoses, tables, Result Cards, commit messages. The author
+writes the paper.
 
 ---
 
 ## 1. Non-negotiable guardrails
 
-Hard constraints. Violating any of them invalidates the work.
-
-- **No fabricated data.** If HABSOS, MODIS, ERA5, or CHIRPS can't be pulled, document the blocker and use labeled placeholders. Never present placeholder numbers as real results.
-- **No causal claims.** Use "associated with," "predictive of," "correlated with." The model finds patterns; it does not prove mechanism.
-- **No "first ever" claims.** Prior work exists (HABNet; NOAA operational HAB forecasting; the mentor's own RTM work). Our contribution is a *reproducible, interpretable, GIS-integrated early-warning workflow on public data* — not a novel model class.
-- **No "operationally ready" claims** unless the model survives the hard validation splits in §9. Random-split performance alone ≠ ready.
-- **Honest negatives.** A HABSOS non-detection is not proven absence — it can mean nobody sampled. Document this wherever labels are used.
-- **Stage order is fixed.** Stage 1 (Random Forest) must be fully working and validated **before** the Stage-2 transformer is trained — the transformer's whole point is to be compared against a solid RF benchmark. The transformer is committed, not optional; only *further* DL variants (e.g., spatiotemporal attention beyond the base transformer) are optional stretch goals.
-- **R for the spatial/data layer.** Match the existing codebase and the mentor's toolchain (see §2, D0). Do not silently reintroduce a parallel Python spatial pipeline.
+1. **HABSOS non-detection ≠ absence.** It can mean "not sampled." Sampling effort is uneven in
+   space and time. Every recall estimate carries this caveat.
+2. **Never let a fill masquerade as an observation.** Filled rows carry `feature_filled = TRUE`.
+   A gap is a gap; report `n_expected` vs `n_retrieved`.
+3. **Resolution honesty.** MODIS ~4.6 km vs 10 km cells: ~4–6 pixels per cell, no sub-pixel
+   precision. ERA5 ~28 km and SSH ~28 km are **regional** covariates. SMAP at 40–70 km is
+   broad-context only and is currently a placeholder.
+4. **One authoritative scorer.** `outputs/tables/model_results.csv`. See `CLAUDE.md` hard rule 3.
+5. **Verify before asserting.** No claim about the repo, the data, or a constant without a
+   command that produced it. See `CLAUDE.md` hard rule 12.
 
 ---
 
@@ -101,395 +55,358 @@ Hard constraints. Violating any of them invalidates the work.
 
 The lead may change these only with an explicit written rationale logged in `reports/decisions.md`.
 
+### 2.0 Live decisions
+
 | # | Decision | Locked value | Rationale |
-|---|----------|--------------|-----------|
-| D0 | Primary language for data + spatial work | **R** (`sf`, `sftime`, `stars`, `tmap`, `data.table`, `tidyverse`) | All existing work and the mentor's method are in R. Modeling may use R (`ranger`/`caret`/`tidymodels`) or Python — decided in D7. |
-| D1 | Study area | **West Florida Shelf, bounded by 24–31°N, 87–81°W**, defined in code as a bounding box (no hand-drawn polygon needed) | This is the established MODIS *K. brevis* study extent from **Hu et al. (2022)**, *Harmful Algae* 117:102289; matches how the ocean-color community grids the shelf. Optional later refinement: clip to the 200 m isobath if offshore deep-water cells hurt the model. |
-| D2 | Positive label threshold | ***K. brevis* > 100,000 cells/L** | Standard bloom-level threshold in prior remote-sensing studies. |
-| D3 | Primary target | **Binary** (`HAB = 1` if a cell-day exceeds threshold) | Simplest defensible MVP. Severity/count classes optional later (mentor's RTM paper predicts counts — a stretch goal). |
-| D4 | Unit of analysis | **Grid cell × date** (RTM-style), **10 km × 10 km cells**, built from the mentor's gridding method | **Confirmed.** Grid-first matches the mentor's demonstrated workflow and his published paper; 10 km sits just above the ~4 km MODIS L3 pixel (real aggregation, no false precision) and below the coarse wind/salinity fields. |
-| D5 | Prediction target & horizon | **Forecast `HAB` at cell _c_, day _T+H_**, using levels + trends observed **through day _T_**. Start with **H = 7 days**; then evaluate H ∈ {1, 3, 5, 7, 14}. | The label is a *future* event → this is genuine forecasting, not nowcasting. See §2.2. |
-| D6 | Framing honesty | **"Forecasting" is earned only because the label is future (D5).** Still report skill *as a function of H* and never claim a longer lead than validated. HABSOS sparsity caveat (§1) still holds. | Precision without overclaiming — say the horizon, show the decay. |
-| D7 | Modeling progression | **Stage 1 — Random Forest** (`ranger`/`caret`). **Stage 2 — Transformer** (temporal / spatiotemporal). Stage 1 first, Stage 2 always. No separate logistic/GLM modeling tier — the *reference points to beat* (persistence + chlorophyll-only) live in §9. | RF is the mentor's method (Green 2022) and a strong, interpretable anchor; the transformer then tests what modeling temporal sequences/trends adds. |
-| D8 | Transformer role | **Committed second modeling stage, not optional.** Operates on per-cell temporal sequences of levels + trend features → future `HAB`. Compared honestly to Stage 1. | The trend-forecasting model; a null result vs. Stage 1 is still a legitimate finding. |
-| D9 | Explainability | **SHAP + variable-importance** (Stage 1) and **attention / attribution** (Stage 2, transformer) | Interpretability contribution across both stages; mirrors Green 2022's variable-importance emphasis. |
-| D10 | Central data artifact | **Spatiotemporal vector datacube** (`sftime`), cell × date × variables | Serves both stages: flatten to `(cell × date)` rows for Stage 1; slice **per-cell temporal sequences** for the transformer. Mentor's chosen approach (Nov 14). |
-| D11 | Trend features are first-class | Every level feature gets companion **rate-of-change features**: absolute deltas, **relative day-over-day % change**, trailing slopes, and **threshold-crossing flags** (e.g., chl-a up >10% DoD for ≥N consecutive days). | The forecasting signal is as much in *movement* as in *level* (author's explicit goal; matches the d/dx(FAI) & chl-ROC notes). See §8. |
-| D12 | Intra-cell attention layer | A GIS **drill-down** that, for a flagged 10 km cell, surfaces **where inside the cell the flag-driving conditions concentrate** — down to native ~4 km MODIS pixels, with placement nudged by sub-km static layers (bathymetry, distance-to-coast). **A diagnostic/interpretability overlay, NOT a validated sub-cell forecast.** Built in A9 (M2); must not gate M1. | Coarse cells screen; this narrows *attention* for response/sampling without claiming precision the data lacks. See §2.3 for the honesty rules. |
+|---|---|---|---|
+| D0 | Primary language | **R** for data + spatial. Python only where no R path exists. | All existing work and the mentor's method are in R. |
+| D1 | Study area | **24–31°N, 87–81°W**, defined in code | Established MODIS *K. brevis* extent, Hu et al. (2022) *Harmful Algae* 117:102289. |
+| D2 | Positive label threshold | ***K. brevis* > 100,000 cells/L** | FWC/NOAA operational category boundary (class 3, "medium"). Matches the direct comparator Duus et al. (2026). **See D14 — lowering it was evaluated and rejected on evidence.** |
+| D3 | Primary target | **Binary** (`HAB = 1` if cell-day exceeds D2) | E-06 confirmed the ordinal reframe is lossless but adds no skill; the derived binary reproduces `HAB_H` exactly. |
+| D4 | Unit of analysis | **Grid cell × date**, **10 km × 10 km**, EPSG:5070 | Mentor's RTM method; 10 km sits above the ~4.6 km MODIS pixel and below the coarse environmental fields. |
+| D5 | Prediction target & horizon | **`HAB` at cell *c*, day *T+H*** from features through *T*. Primary **H = 7**; report H ∈ {1,3,5,7,14}. | The label is a future event → genuine forecasting. |
+| D6 | Framing honesty | "Forecasting" is earned only because the label is future. Report skill as a function of H; never claim an unvalidated lead. | Say the horizon, show the decay. |
+| D9 | Explainability | SHAP + variable importance, **diagnostic only** | Selection must be train-derived — D-12. |
+| D10 | Central data artifact | Spatiotemporal datacube, cell × date × variables | |
+| D11 | Trend features are first-class | Every level gets deltas, % change, trailing slopes, threshold-crossing flags | **Amended by D18** — slopes must be calendar-day, not observation-order. |
+| D12 | Intra-cell attention layer | GIS drill-down to ~4 km MODIS pixels. **A diagnostic overlay, NOT a validated sub-cell forecast.** | Built in A9; must not gate M1. |
 
-### 2.1 Study-area and grid decisions (settled)
+### 2.1 Superseded decisions
 
-The unit of analysis is **grid cell × date**, following the mentor's method (in the `gulf` script and in **Green (2022), "The Built Environment and Predicting Child Maltreatment"**): lay a grid over the study area, aggregate point observations into cells, attach features per cell, predict per-cell risk. Both open questions are now resolved:
+| # | Was | Now | Rationale (logged 2026-07-16) |
+|---|---|---|---|
+| **D7** | Stage 1 RF → Stage 2 Transformer | **Stage 1 gradient-boosted trees (LightGBM). No deep stage.** | See D14(a). With **333 effective independent bloom events**, no from-scratch deep model can beat a tuned tree ensemble regardless of architecture or tuning — this is now a *measured* claim, not an empirical tie. Grinsztajn et al. (2022) NeurIPS; Shwartz-Ziv & Armon (2022) *Information Fusion* 81:84–90. |
+| **D8** | Transformer is a committed second stage | **Retired.** The existing transformer result stands as a reported null (TIE, CI spans zero at H=7: −0.0018 [−0.037, +0.027]). | It is now a *predicted* null with a measured cause, which is a stronger result than an unexplained one. Do not re-run. Do not tune. `python/` is archived, not deleted. |
 
-- **Study area:** the **24–31°N, 87–81°W** bounding box (Hu et al. 2022), defined in code — no QGIS polygon required for the MVP. A2 builds it with `sf::st_bbox()` → `st_as_sfc()`.
-- **Cell size:** **10 km × 10 km** (`cellsize = 10000` in Albers EPSG:5070), matching the mentor's script and sitting just above the ~4 km MODIS L3 pixel.
+### 2.2 New decisions
 
-Both are defensible to write up in one sentence: *"Study area defined as the West Florida Shelf (24–31°N, 87–81°W) following Hu et al. (2022), gridded into 10 km cells."* Optional future refinement: intersect the box with the 200 m isobath to drop offshore deep-water cells if they degrade the model.
+| # | Decision | Locked value | Rationale |
+|---|---|---|---|
+| **D13** | **Two arms** | **Arm A (portable)** — satellite + global reanalysis only, zero HABSOS-derived features. **Arm B (instrumented)** — Arm A + HABSOS-derived lags + any gauge data. | The project thesis is deployability where no in-situ network exists. `hab_any_prior_*` requires a boat to have sampled the cell *at scoring time*, and is undefined on 99.76% of the grid on any given day — it breaks portability **and** makes an honest whole-shelf surface impossible. **A−B is the contribution**, not either arm alone. Arm B is the in-family point of contact with Duus et al. (2026). |
+| **D14** | **Two separate limits. Do not conflate them.** | **(a) Data limit — 333 events.** The WFS produces **~17.5 independent bloom events/yr**; the 2003–2021 MODIS era gives **333** (spatial-merged, 14-day rule). **(b) Resolution floor — ~40 blocks.** The H=7 temporal CI is set by the **40 positive-carrying 30-day blocks** in the 2016-01-01 → 2021-08-24 test window (69 blocks total, 29 with zero positives). Measured half-width on `rf_roc` = **0.0334** ⇒ σ ≈ **0.108**. | **(a)** is a property of the ocean and sets *model capacity*: ~10 events/feature supports **~33 features**, not 149 (2.2 now); and no from-scratch deep model can beat a tuned tree ensemble at this event count (see D7). **(b)** is a property of the **evaluation design** and sets *what we can prove*. <br><br>**CORRECTION (Gate 0, 2026-07-16).** The previous revision claimed the floor followed from 1.96·σ/√333. **That derivation was wrong** — 333 is a shelf-wide count over 2003–2021; the H=7 CI is computed on a 5.6-year test slice. Two numbers that happened to agree were reported as mechanistic confirmation. They are different populations. The √333 match was numerology. <br><br>Still standing, still measured: CI width scales as **n_rows^-0.126**, not n^-0.5 — rows carry almost no independent information; the unit is the block, not the row. **Consequence:** any effect under ~±0.033 is unresolvable at H=7 **under the current single-cutoff split** — and per D20 that split is a design choice, not a physical limit. |
+| **D20** | **The temporal split is n=1 and that is fixable** | Move to **rolling-origin CV** (train ≤2010 → test 2011; ≤2011 → test 2012; …). Report the single-2016-cutoff split alongside it for continuity. | D-10 already criticises the *spatial* split for being a single fixed geography (n=1, no rotation). The same objection applies to the temporal split and was never made. The 2016 cutoff puts **5.6 years / 40 positive blocks** in test. Rolling origin puts ~11 years / **~78 positive blocks** in test ⇒ half-width **0.0334 → ~0.024**, a **1.4× tightening**. **This is the only genuine power lever identified.** <br><br>**It is not free.** The estimand changes — "average skill across origins" is not "skill after 2016" — and must be stated as such, not swapped silently. The model refits per fold, so compute scales with fold count, and every fold needs its own embargo. **R-POWER owns the estimand statement.** |
+| **D15** | **Row anchoring** | A row is `(cell, T = label_date − H)`. Features from satellite at *T*. **No feature-time HABSOS sample required.** | Removes the double-sampling requirement. H=7: 23,751 → **55,629** rows (verified). H1/H3/H5 gain **7–12×**, which retires the confound that "the skill-vs-horizon decay curve is partly a sample-size curve." **This is a confound fix, not a power fix** — per D14, rows do not tighten CIs. The power lever is D20. |
+| **D16** | **Model** | **LightGBM**, monotonic constraints on physically-signed features (`chl↑→risk↑`, `nFLH↑→risk↑`), AUCPR-surrogate objective, pruned to **~33 features by train-side OOB rank** with a pre-declared cut. RF retained as a co-reported baseline. | E-02 was never run — confirmed zero references to lightgbm/xgboost/gbm anywhere in the repo. Native NA handling matters now that 66.7%-imputed chlorophyll is load-bearing (Arm A has no lags to fall back on). Monotonic constraints are the cheapest available regulariser at 333 events and are defensible to a reviewer. `mtry=11/114` currently gives any feature an **8.8%** chance of being considered per split; at 33 features it is 18%. **Terminology:** "boosted random forest" is not a thing — boosting and bagging are different ensembling schemes. Call it GBDT. |
+| **D17** | **Arm B lags are continuous** | `log10_max_cells_prior_{7,14}d`, `days_since_last_positive`, `max_severity_prior_14d`, `log10_max_cells_neighbors_prior_7d`. | The current lags are **single bits**. `hab_any_prior_7d` makes 5,000,000 cells/L and 100,001 cells/L identical, and makes 99,999 cells/L identical to open ocean. HABSOS carries `organismQuantity` in cells/L across five orders of magnitude and the datacube discards all of it. This is the single largest information loss in the model and it is exactly Duus et al. (2026)'s dominant predictor. Arm B only — these are HABSOS-derived (D13). |
+| **D18** | **Slopes are calendar-day** | Replace `_slope_obsK` with `_slope_Nd`. | D-03, live since the DRAFT. "Change per satellite observation" is not a rate: a 3-observation slope spans 3 days or 30 depending on cloud gaps. Tolerable when the lags did the work; **load-bearing under Arm A**. |
+| **D19** | **Rich-persistence baseline is mandatory** | Every arm ships against a persistence baseline built from **the same lag features that arm uses**. | Persistence reaches 70–96% of RF PR-AUC. Enrich Arm B's lags (D17) and you will build an excellent persistence model — which is what a 0.972 ROC-AUC *is*. Duus et al. report no persistence baseline; we will. If Arm B hits 0.90 and rich-persistence hits 0.88, satellite bought 0.02 and we say so. <br><br>**PROMOTED TO LOAD-BEARING (R-PROV, 2026-07-16).** The current persistence baseline is **binary — two distinct values** (`HAB at T`). Its sensitivity is **below 0.80 at every horizon** (0.778/0.710/0.654/0.627/0.523), so it can *never* reach recall 0.80 and `prec_at_recall80` against it is a degenerate operating point, not a comparison. RF-vs-persistence now resolves as a WIN on PR at H=3/5/7/14 — **but that is a win over a two-valued predictor and must not be reported as a headline.** Duus et al.'s implicit baseline is continuous lagged cell counts. **D19's rich-persistence is the only honest bar; until it exists, no persistence claim is publishable.** |
 
-### 2.2 What "forecasting" means here (the labeling that earns the word)
-
-The target is the bloom status of a cell **_H_ days in the future**, predicted from what we observe **up to and including day _T_**. Concretely, one training example is:
-
-> **Inputs (through day _T_):** feature *levels* at _T_ (chl-a, SST, FAI, Kd490, salinity, wind, …) **and** *trend* features summarizing how each moved over the trailing window (day-over-day % change, 3/5/7-day slope, threshold-crossing flags — see D11/§8).
-> **Label:** `HAB` at the same cell on day **_T+H_**.
-
-This is why it is forecasting rather than detection: nothing from day _T+1 … T+H_ is allowed into the features. Two consequences the agents must respect:
-- **No look-ahead leakage.** Any feature, rolling mean, or anomaly must be computed from data at or before _T_. A6/A7 must assert this in code.
-- **Skill decays with _H_.** Report metrics per horizon; expect the 14-day forecast to be weaker than the 3-day. That decay curve is a *result*, not a failure.
-
-**Levels vs. trends are both predictors, by design.** A cell can be high-risk because chl-a is already elevated (level) *or* because it is climbing fast from a low base (trend). Stage 1 gets both as engineered columns; the transformer (Stage 2) can additionally learn trend structure directly from the input sequence.
-
-### 2.3 Intra-cell attention layer — what it is, and the rules that keep it honest (D12)
-
-The model predicts at the 10 km cell. But once a cell is flagged, we can look *inside* it and show **where the flag-driving conditions concentrate**, to direct response and sampling. This is a real, defensible feature — as long as it is built and labeled as *diagnostic*, not as a finer forecast. The rules:
-
-- **It shows features, not a prediction.** The model earned its skill at the cell level; the drill-down displays the underlying feature field the flag was built from. Label every such view as *"where the flagging conditions concentrate,"* never as a sub-cell risk score. It carries no validated skill below the cell.
-- **The floor is ~4 km, not beach-scale.** The finest *bloom-varying* input is the ~4 km MODIS L3 chl-a/FAI pixel (a 10 km cell holds ~4–6 of them). Attention narrows to a hot pixel — a ~16 km² patch, i.e. a stretch of coast — not a specific beach. Do not render below the native pixel; a finer square would be the same pixel value repeated (false precision).
-- **Convergence is the signal.** The layer is most trustworthy where **multiple independent inputs agree** on a location — e.g., the elevated ~4 km chl-a pixel sits on the shallow, nearshore corner indicated by the sub-km bathymetry and distance-to-coast layers. Surface that agreement; a lone elevated pixel is weaker evidence than a converging cluster.
-- **Static layers bias placement, they are not bloom evidence.** Bathymetry and distance-to-coast are constants — they refine *where within the hot pixel* accumulation is plausible, but they'd point to the same corner with or without a bloom. Use them to nudge attention, not as proof of this event.
-- **Levels over trends; short horizon over long.** Prefer sub-cell *level* fields (chl-a, FAI). Pixel-level *trend* fields (day-over-day % change) are noisiest at native resolution (cloud gaps, glint) — the very reason we aggregate to cells — so show them cautiously or not at all. And the drill-down is most meaningful for short horizons / the detection regime; at H=7 the sub-cell field is the *pre-bloom precursor* field, which can drift with wind and current before the bloom lands. State that caveat on long-horizon maps.
-
-
+---
 
 ## 3. Milestones & gates
 
-### M1 — Stage-1 Random Forest forecasting model (**the paper's core**)
-**Entry:** repo scaffolded; `PLAN.md` and `CLAUDE.md` read; study-area polygon available.
-**Exit (all required):**
-- `data/processed/study_area_grid.gpkg` exists (coastal grid, EPSG:5070, `id_col`).
-- `data/processed/habsos_labels.parquet` exists: HABSOS aggregated to cell × date with the binary `HAB` label at horizon _H_ (D5) and a labels summary.
-- `data/processed/datacube.*` exists: cell × date × features — **levels *and* trend features (D11)** — joined to the T+H label with **no look-ahead leakage** (§2.2).
-- **Random Forest** (`ranger`/`caret`) trained and reported **per forecast horizon** H ∈ {1, 3, 5, 7, 14}, against the **persistence + chlorophyll-only reference baselines** (§9).
-- Evaluated under **random, temporal (year), and spatial (held-out counties/regions)** splits, metrics reported for each.
-- `outputs/tables/model_results.csv` + confusion matrix / ROC / PR curves + **skill-vs-horizon curve** saved.
-- SHAP + variable-importance produced (does level or trend dominate?).
-- Every M1 file carries its §0.1 notes; A-DOC has logged the techniques.
-**Gate:** the transformer (M3) does not start until M1 exit criteria are met and committed — it needs a benchmark to beat.
+### Gate 0 — Is the target measurable? `[PASSED 2026-07-16]`
 
-### M2 — GIS risk mapping & visualization
-**Entry:** a saved, validated Stage-1 model exists (starts off M1; refresh if the transformer later wins).
-**Exit:**
-- Current best model applied to every grid cell for chosen date(s) → `outputs/gis/hab_risk_grid.gpkg` + `hab_risk_raster.tif`.
-- Priority-monitoring-zone layer + coastal-region risk summary.
-- Interactive map (`outputs/maps/hab_risk_map.html`) with the layer stack; map states clearly it is a model **forecast** at horizon _H_, not observed blooms.
-- **Intra-cell attention drill-down (D12/§2.3):** for flagged cells, a sub-cell overlay showing where the flag-driving features concentrate (native ~4 km pixels + static-layer context), labeled as *diagnostic feature concentration*, not a sub-cell forecast → `outputs/gis/intracell_attention.gpkg` (or a raster/interaction in the HTML map).
-- QGIS project file or reproducible `tmap`/`leaflet` script committed.
+**Result:** `7,temporal,rf_roc,0.836,0.7999,0.8667,TRUE,30,1000`. **0.900 lies above ci_hi = 0.8667**,
+outside the interval by 0.0333. Not marginal. **Rule A — the target is measurable and falsifiable.**
+`best_model.rds` md5 unchanged (`3ea9a5fa…`); no retrain. Machinery reused from
+`R/07e_pC_bootstrap.R`; RF ROC points reproduce `model_results.csv` to 4 dp at all five horizons.
 
-### M3 — Stage-2 transformer (**committed, not optional**)
-**Entry:** M1 complete and committed (validated Stage-1 benchmark exists).
-**Exit:**
-- Transformer trained on **per-cell temporal sequences** of levels + trend features → forecast `HAB` at T+H.
-- Same three splits and same horizons as M1; compared **head-to-head** against baseline + RF in one table.
-- Attention/attribution produced for interpretability (D9).
-- Honest verdict: if the transformer does **not** beat Random Forest, say so plainly — a null result on this comparison is a legitimate, reportable finding.
-- *(Optional stretch:)* spatiotemporal variants (e.g., attention over neighboring cells) only if time remains.
-**Gate:** GIS (M2) may be refreshed to use the transformer only if it wins under the *hard* (temporal/spatial) splits, not just random.
+**What Gate 0 also produced — read these before planning any run:**
 
----
+- **The cost of 0.900 is larger than everything satellite currently buys.**
+  `d_rf_pers_roc` at H=7 = **0.0487 [0.0248, 0.0749]**. The target needs **+0.064**. The RF beats
+  persistence by 0.049. **The gap to the target exceeds the total value of the satellite features
+  over persistence.** A marginal-feature path to 0.900 does not exist; it has to come from D17's
+  continuous lags — which lift persistence too (hence D19).
+- **A new resolved result, to be reported with both metrics.** `d_rf_pers_roc` excludes zero at
+  **all five horizons**, while on PR-AUC the RF-vs-persistence contrast is **NULL at H=7**. The
+  honest sentence is: *the RF carries information beyond persistence — resolvable on ROC at every
+  horizon — but not enough to resolve on PR-AUC at the primary horizon.* **Both halves, always.**
+  PR-AUC is the pre-registered primary (§9). Leading with the ROC because it resolves is
+  metric-shopping and a reviewer will find the PR table.
+- **`chl_only` has no persisted per-row predictions**, so it cannot be bootstrapped without a
+  retrain. Rows written blank at `n_boot=0` — a gap, not a value. **Every baseline must dump
+  per-row predictions at scoring time or it cannot carry a CI** (see D19 — the rich-persistence
+  baselines will hit this same wall).
 
-## 4. Target repository structure
+### M0 — Stop the lies `[main]`
 
-Scaffold this exactly. Empty dirs get a `.gitkeep`. Add a `.gitignore` excluding `data/raw/`, `*.tif`, `*.rds`, `*.pkl`, `.env`, and image-patch dumps.
+- **🔴 SCORER BUG — `R/07_modeling.R:266–314`.** `roc_auc_fn`, `pr_auc_fn`, and
+  `precision_at_recall_fn` walk tied rows one at a time, so **within-tie row order changes the
+  answer**. Harmless for continuous scores; catastrophic for persistence, which is **binary
+  {0,1}**. Confirmed two ways: (i) 5 random shuffles of the same rows give 0.7806–0.7904 while
+  natural order gives 0.8213 — *above every shuffle*, i.e. biased upward, not merely noisy;
+  (ii) `(sens+spec)/2` computed from `model_results.csv`'s **own confusion matrices** reproduces
+  0.8637/0.8270/0.8007/0.7873/0.7287 exactly — the file arithmetically contradicts itself.
+  **Fix:** Mann-Whitney U with ties credited 0.5 (ROC); average precision (PR); tie-collapsed
+  p@r80. **This is M0, not M2** — M2 is a retrain and would re-corrupt the table.
+- **🔴 Re-run `R/07e_pC_bootstrap.R`** with average precision. `model_results.csv` is patched to
+  canonical; `bootstrap_cis_pC.csv`'s `d_rf_pers` PR rows are not. **Two disagreeing artifacts are
+  in the tree right now** (P-06, regenerated within one task of being fixed). Scoring the frozen
+  dump is not a retrain.
+- **D-04**: `R/05_environmental_features.R:773` — `&` → `|`. Verified present and exactly as the
+  register describes. Re-run A5→A6. No retrain.
+- **`renv.lock`**: 34 of 176 packages recorded; **`ranger` — the model — is unlocked**. This is not
+  drift, the lockfile is decorative. A clean `renv::restore()` does not install the model.
+- **`CLAUDE.md`**: claims commit `21320f7` is "stranded on one laptop" and the remote "lacks the
+  bio-optical branch." Both false — it is on `origin/main`.
 
-```text
-bloomguard-gis/
-  README.md
-  PLAN.md              # this file
-  CLAUDE.md            # agent behavior rules / repo conventions
-  renv.lock            # R dependency lockfile (renv)
-  requirements.txt     # only if a Python model/DL step is used
-  config.yaml
-  .gitignore
-  reports/
-    decisions.md       # log any change to §2
-    methods_log.md     # A-DOC: harvested techniques + citations (feeds the paper)
-    technique_index.md # A-DOC: technique -> where used -> source
-    agent_logs/        # one <agent>.md decision log per agent (§0.2)
-  paper/
-    source_set.md      # A-DOC: FINAL deliverable — publication-ready cited source set
-    references.bib     # A-DOC: all citations, resolvable
-  data/
-    raw/
-      habsos/          (+ manual_downloads.md)
-      satellite/       (+ manual_downloads.md)
-      weather/         (+ manual_downloads.md)
-      gis/             (study-area polygon, coastline, bathymetry, counties)
-    processed/
-      study_area_grid.gpkg
-      habsos_labels.parquet
-      satellite_features.parquet
-      environmental_features.parquet
-      datacube.rds            # sftime vector datacube (central artifact)
-      model_dataset.parquet   # flattened cell x date table for modeling
-      model_dataset.gpkg
-    metadata/
-      data_sources.md
-  R/
-    00_config.R
-    01_source_data.R          # API pulls where possible
-    02_build_grid.R           # study-area polygon -> grid (Green method)
-    03_habsos_labels.R
-    04_satellite_features.R
-    05_environmental_features.R
-    06_build_datacube.R       # sftime cube + flatten to model_dataset
-    07_modeling.R
-    08_explainability.R
-    09_gis_export.R
-    utils_spatial.R
-  python/                     # only if used (DL / any Python model step)
-    modeling.py
-    dl_patches.py
-  outputs/
-    models/   figures/   tables/   maps/   gis/
-```
+**Exit:** all three fixed on `main`, pushed. Then branch. Both arms inherit honest flags.
 
-> **Why R scripts over notebooks:** the mentor works in scripts; the Nov 15 note (`rbindlist`, parallelizing the water-level-to-csv step) and the `gulf` script are script-based. Notebooks are fine for exploration but the committed pipeline should be sourced `.R` files that run end-to-end.
+### M1 — The datacube rebuild (`feat/arm-a-portable`)
+One rewrite of `R/06_build_datacube.R` producing **two feature sets from one row definition**
+(D13, D15, D17, D18). Both arms share splits, folds, seeds, and scorer (A-ARM).
+
+**Exit:** row counts match the verified §4 diagnostic (H=7 Arm A = 55,629 ± clouds); R-STARVE
+passes on join cardinality; R-SPLIT passes on embargo + ≥25 km buffer (D-11 ring-1 reach).
+
+### M2 — Model (D16, D19)
+LightGBM both arms + rich-persistence baseline per arm + RF co-reported.
+**Exit:** A−B with a block-bootstrap CI. If |A−B| < 0.033 the delta is unresolved and *that is the
+result* (D14b).
+
+### M3 — GIS risk surface `[co-equal deliverable, not an afterthought]`
+Arm A only — Arm B's features are undefined on 99.76% of the grid, so **the portability argument
+and the GIS deliverable are the same argument**. Ship at the operating point where the product is
+decision-ready (default threshold: 7.1% of shelf flagged at 61% precision). Report the operating
+envelope as a finding: at recall 0.80 the model flags 35% of the shelf and the map is useless.
+Includes D12 drill-down.
+
+### M4 — Paper
+See §10.
+
+> **M3 (transformer) from the previous revision is retired.** See D7/D8.
 
 ---
 
-## 5. Data sources (with access reality)
+## 4. Repository structure
 
-**Every dataset entry in `data/metadata/data_sources.md` must record:** source URL, date accessed, access method, auth required (Y/N), spatial resolution, CRS, temporal coverage, license, and purpose. A-DOC verifies this table is complete before M1 exit. If a pull needs an account or a manual portal, write step-by-step instructions to that folder's `manual_downloads.md` — do **not** block the team.
-
-**Prefer APIs; only download manually when no API exists.** (Author's standing instruction.)
-
-| Dataset | Source | Access | Auth? | Key variables | Resolution | Purpose |
-|---|---|---|---|---|---|---|
-| HABSOS *K. brevis* cell counts | NOAA NCEI HABSOS | Portal export / API | Manual export likely | lat, lon, date, cell_count, agency, depth | point samples | **Ground-truth labels** |
-| MODIS-Aqua Ocean Color L3 | NASA OB.DAAC (`oceandata` API) / GEE | API | **Y** (Earthdata / GEE) | chlor_a, nFLH, Kd490, SST, Rrs bands | ~4.6 km | Satellite features |
-| GCOM-C / SGLI L3 SST (V3) | JAXA via GEE catalog | GEE API | **Y** | sea surface temperature | ~4.6 km | SST source (per Sept 23 notes) |
-| Sentinel-3 OLCI | Copernicus / GEE | API | **Y** | radiance bands, chl ratios, turbidity | ~300 m | Higher-res satellite (optional) |
-| CHIRPS precipitation | UCSB / GEE | API | N–Y | rainfall, rainfall anomaly | ~5 km | Rainfall/runoff proxy |
-| Wind (ERA5 or CCMP) | Copernicus CDS (`cdsapi`) / RSS | API | **Y** (CDS key) | wind speed/direction | ~0.25° | Mixing/upwelling, bloom transport |
-| SMAP sea-surface salinity | RSS / PODAAC | API | **Y** (Earthdata) | salinity | ~40–70 km | Stratification/river-discharge proxy |
-| Bathymetry / coastline | GEBCO / NOAA | download | N | depth, shoreline | grid/vector | Distance-to-shore, depth features |
-| County/region boundaries | US Census TIGER | download | N | polygons | vector | GIS zoning + spatial splits |
-
-**Access links (from author's notes):** NOAA NCEI HABSOS landing page; NASA OB.DAAC `oceandata` file-search API + Earthdata login; CHIRPS (UCSB CHC); SMAP salinity (oceansciences.org); JAXA GCOM-C SST (GEE catalog). A-DOC records the exact URLs and access dates.
-
-> **Resolution reality check (add to limitations):** MODIS pixels are ~4.6 km, so a 10 km grid cell spans only a few pixels. Treat cell statistics accordingly and don't imply sub-km precision. Salinity (SMAP) is far coarser — flag it as a broad-context feature, not a fine-scale one.
-
-> **Label/feature cadence mismatch (from Sept 23 notes):** labels (HABSOS) are effectively daily/event-based; some features arrive at coarser cadence. Where a feature is coarser than daily, forward/backward-fill within its valid period and **flag filled rows** (`feature_filled = TRUE`). Never let a fill silently masquerade as an observation.
-
-> **Sandbox note:** these pulls need network egress and may hit blocked domains under the session sandbox. Run heavy downloads in a non-sandboxed pane, then let sandboxed teammates read the local files.
+Unchanged. New environmental sources are **sections of `R/05_environmental_features.R`**
+(A=TIGER, B=GEBCO, C=dist-to-shore, D=CHIRPS, E=ERA5, F=SMAP, G=seasonality, **H=SSH**), not new
+scripts. `data/raw/` is organised **by domain** (`gis/`, `habsos/`, `satellite/`, `weather/`), not
+by product. Every dataset gets a row in `data/metadata/data_sources.md` with the mandated schema.
 
 ---
 
-## 6. Agent roles (inputs → outputs → done → checks)
+## 5. Data sources
 
-Ordered by dependency. Each agent's model is noted. A-DOC runs continuously alongside the others.
+Authoritative table: **`data/metadata/data_sources.md`**. Do not duplicate it here (D-22).
 
-### 6.0 Paired reviewers (data-pipeline agents only)
+Status summary as of 2026-07-16:
 
-**Reviewers are attached only to the agents that pull and shape the data — A1–A6.** Those are the stages where a silent inaccuracy (a bad pull, a broken join, a mislabeled cell) would propagate undetected through everything downstream, so each gets a dedicated checker. The modeling/output agents (A7 RF, A8 explain, A9 gis, A10 validation, A11 transformer) and A-DOC do **not** get general paired reviewers — their work is inspectable from their own outputs and their built-in **Checks** and the milestone gates still apply. **The one exception is R-SPLIT** (below), a single narrow leakage check on the A7/A11 train/test split.
-
-Each data agent A*n* (n = 1–6) is paired with a **reviewer R*n*** whose only job is to verify A*n*'s output against its definition-of-done and **Checks**, and — if it finds a problem — **hand the specific defect back to A*n* to fix** (the reviewer does *not* fix it itself). Loop: agent produces → reviewer verifies → if fail, reviewer returns a numbered defect list (file, location, what's wrong, why it matters) → agent fixes → reviewer re-checks → **pass**. A data agent's output is not done, and downstream agents depending on it don't start, until its reviewer signs off. Reviewers report only pass/fail + defects to the lead.
-
-**Reviewer model = the cheapest that will still catch that agent's class of mistake.** Straightforward checks (schema/columns, CRS consistency, paths, obvious gaps) → **Haiku 4.5**. Checks where a subtle miss is expensive and data-corrupting — label correctness and look-ahead leakage baked into the datacube — → **Sonnet 5**.
-
-| Reviewer | Model | Watches for (its agent's high-risk data mistakes) |
+| Source | Status | Note |
 |---|---|---|
-| R1 (sourcing) | haiku-4-5 | wrong dataset/version, committed secrets, unlabeled placeholders |
-| R2 (grid-clean) | haiku-4-5 | CRS mismatch, wrong box/cell size, grid gaps |
-| R3 (habsos-label) | **sonnet-5** | wrong threshold, negatives dropped, non-detection treated as absence |
-| R4 (sat-features) | haiku-4-5 | silent zero-fill, cloud pixels leaking, wrong time windows |
-| R5 (env-features) | haiku-4-5 | join duplication, coarse features implying fine precision |
-| R6 (datacube) | **sonnet-5** | **look-ahead leakage**, join blow-up, mislabeled T+H, row miscount |
-
-Burning extra credits on these six reviewers is expected and wanted — a bad-data bug caught at A1–A6 is far cheaper than discovering it after the model trained on it.
-
-**One narrow exception on the modeling side — R-SPLIT (`sonnet-5`).** The split-leakage risk is a *data-handling* error wearing a modeling costume, so it gets the single targeted checker the rest of A7–A11 do not. R-SPLIT reviews **only the train/test split construction** in A7 (RF) and A11 (transformer) — nothing else about those agents. It verifies: (1) **no spatially adjacent cells straddle train and test** (grouped/blocked split respects the spatial-autocorrelation clusters flagged by A6); (2) **temporal split is clean** — no future rows in training for a given horizon; (3) **the T+H label window doesn't bleed across the split boundary**. Same loop as R1–R6: if it finds leakage, it hands the specific defect back to A7/A11 to fix; A7's best model and A11's results are not "done" until R-SPLIT signs off. It does **not** review model code, hyperparameters, or metrics — those stay on the agents' own Checks.
-
-### A-DOC · publication source set *(model: sonnet-5)* — **runs continuously; produces the FINAL deliverable**
-The dedicated agent that reads **every agent's `reports/agent_logs/<agent>.md`** (their decisions, sources, and methods — §0.2) plus the inline `NOTE()` tags, and synthesizes them into a single **publication-ready source set** for the author's paper. **This is the project's final deliverable.** It is the only "writing" agent, and it does **not** write the paper — it produces the cited, organized raw material the author writes from.
-- **In:** all `reports/agent_logs/*.md`; every file the other agents produce; the `NOTE(...)` tags; the attached PDFs (planning doc, Green 2022 RTM paper, the author's literature-review notes).
-- **Out (the final deliverable):**
-  - `paper/source_set.md` — the master document: for every decision, method, and dataset used anywhere in the project, a publication-ready entry (plain-language description + the citation to use + which agent/file it came from), organized by paper section (Data / Methods / Modeling / Results / Limitations) so the author can lift it straight in.
-  - `paper/references.bib` — every cited source as a resolvable DOI/URL. **No invented citations.**
-  - `data/metadata/data_sources.md` — complete, verified source table (see §5 required fields).
-  - `reports/methods_log.md` + `reports/technique_index.md` — technique → where used → source, harvested across all agent logs.
-- **Done:** every per-agent log consumed; every decision/method/dataset in the project has a traceable, publication-ready entry in `source_set.md`; every `.bib` entry resolves; nothing in the code or logs is missing from the source set.
-- **Checks (self-enforced; no paired reviewer):** no invented or unresolvable citations; every technique traces to a real source or is honestly marked "novel / mentor's method"; flags any agent-log claim that overstates what the data supports.
-- **Explicitly not doing:** abstract, introduction, related-work prose, discussion. The author writes those from the source set.
-
-### A1 · sourcing — Data Sourcing *(model: sonnet-5)* ← **M1 critical path, do first**
-- **In:** §5 dataset table; access links from notes.
-- **Out:** raw files under `data/raw/**`; `manual_downloads.md` in each folder for anything not API-pullable; `R/01_source_data.R` (+ `python/` only if a dataset truly needs it).
-- **Done:** every dataset either pulled via API or documented with exact manual steps; each pull logged (URL, date, auth) for A-DOC.
-- **Checks:** APIs preferred over manual; no credentials committed; placeholder files clearly labeled if a source is blocked.
-
-### A2 · grid+clean — Study Area, Grid & Cleaning *(model: sonnet-5)* ← **the spatial heart**
-- **In:** the study-area bounding box **24–31°N, 87–81°W** (defined in code, D1) + raw point data from A1.
-- **Out:** `data/processed/study_area_grid.gpkg`; cleaned per-variable spatial tables.
-- **Done:** build the box with `sf::st_bbox()` → `st_as_sfc()` (WGS84), reproject to Albers **EPSG:5070**, then grid via the mentor's method (`st_make_grid`, `cellsize = 10000`, `id_col`); points converted from WGS84 (EPSG:4326) and spatially joined to cells; date-time reduced to date; per-cell/per-date aggregation as in the `gulf` script.
-- **Checks:** consistent CRS on every join; grid covers the full study area; aggregation counts sane; `NOTE(paper)` on cell-size choice and projection rationale.
-
-### A3 · labels — HABSOS Labeling *(model: sonnet-5)*
-- **In:** cleaned HABSOS points + the grid from A2.
-- **Out:** `data/processed/habsos_labels.parquet` + a labels summary.
-- **Done:** *K. brevis* aggregated to cell × date; binary `HAB` per D2; positive/negative cell-day counts reported.
-- **Checks:** label balance reported; the "non-detection ≠ absence" caveat written into the summary and tagged `NOTE(limitation)`.
-
-### A4 · sat-features — Satellite Features *(model: sonnet-5)*
-- **In:** grid + label cell-days from A2/A3.
-- **Out:** `data/processed/satellite_features.parquet` (+ patches only if M3 later needs them).
-- **Done:** per cell × date, satellite features over T−1/3/5/7/14 windows; rolling means; SST anomaly; cloud/quality filtering; **filled rows flagged**.
-- **Checks:** CRS consistent; date range documented; cells with no usable imagery flagged, not zero-filled silently.
-- **⚠️ Storage — stream-and-discard (mandatory, do NOT bulk-download first):** MODIS L3 is served as **global daily files** with no server-side bbox subsetting, so a naïve "download the whole 2003–2025 archive, then process" run would stage **300–500 GB** and crash a limited disk mid-run. Instead, process **one unit at a time**: (1) download one day's global file → (2) clip to the D1 box (24–31°N, 87–81°W) → (3) aggregate to the 10 km grid → (4) append cell-rows to the feature table → (5) **delete the global file** → next day. Peak disk stays ~one file (~15 MB) + the small growing Parquet, not the full archive. Make the loop **resumable** (checkpoint by date so a re-run skips days already written) and idempotent. For sources that support server-side bbox subsetting (**ERA5** via `area:`, **CHIRPS**), request the Gulf box directly and skip the global-download step entirely. Log peak disk use in the run summary.
-- **Note (for D12 drill-down):** the modeling table stays **cell-level** — do *not* bloat the datacube with per-pixel rows. Instead, keep the **native ~4 km feature rasters retrievable** (retain source files or record an exact re-pull recipe) so A9 can re-derive intra-cell pixel values **only for the date(s) being mapped**. (Note this is *selective* retention of a few mapped dates — it does not conflict with stream-and-discard, which governs the full-archive pass.)
-
-### A5 · env-features — Environmental & Geographic Features *(model: sonnet-5)*
-- **In:** grid + labels + satellite features.
-- **Out:** `data/processed/environmental_features.parquet`.
-- **Done:** wind (speed/dir + along/cross-shore), precip history, salinity, distance-to-shore, bathymetry, seasonality (month + day-of-year sin/cos) per cell × date.
-- **Checks:** one row per cell-day; missing-data report; coarse features (salinity) flagged as broad-context.
-
-### A6 · datacube — Build the Datacube *(model: fable-5)*
-- **In:** labels + satellite + environmental features.
-- **Out:** `data/processed/datacube.rds` (`sftime` vector cube) **and** the flattened `model_dataset.parquet` / `.gpkg`.
-- **Done:** all layers joined **on date via inner/left joins** (not one giant outer join — per Sept 25 mentor guidance), then combined across grids (`rbindlist`-style) into the cube; **trend features (D11/§8-B) computed here** from the per-cell time series; **T+H labels attached** with a leakage assertion (§2.2); flatten produces one clean row per cell × date for Stage 1 **and** exposes **per-cell ordered sequences** for the Stage-2 transformer.
-- **Checks:** no join blow-up from many-to-many; row counts reconcile; **no look-ahead** — assert every feature timestamp ≤ _T_ and every label timestamp = _T+H_; **spatial-autocorrelation flag** — mark clusters of adjacent cells so A7/A11 prevent leakage; cube slices back to the grid for mapping.
-
-### A7 · modeling — Stage-1 Random Forest *(model: fable-5)* ← **M1 exit owner**
-- **In:** `model_dataset.parquet` (levels + trend features + T+H labels).
-- **Out:** `outputs/models/best_model.rds`, `outputs/tables/model_results.csv`, confusion/ROC/PR figures, **skill-vs-horizon curve**.
-- **Done:** **Random Forest** (`ranger`/`caret`) trained and reported **per forecast horizon** H ∈ {1,3,5,7,14}, against the persistence + chlorophyll-only reference baselines (§9); evaluated under §9's three splits.
-- **Checks:** **no look-ahead leakage** (§2.2) *and* no target-defining features; adjacent cells don't straddle train/test (grouped/spatial splits); **prioritize recall + PR-AUC** (a missed bloom > a false alarm); report the performance *drop* under temporal/spatial splits **and** the decay across horizons honestly. **The train/test split must be signed off by R-SPLIT (§6.0) before the best model counts as done.**
-
-### A8 · explain — Stage-1 Explainability *(model: opus-4-8)*
-- **In:** best Stage-1 model + datacube.
-- **Out:** `outputs/figures/shap_summary.png`, `outputs/tables/top_features.csv`, `outputs/tables/variable_importance.csv`.
-- **Done:** SHAP + variable-importance (à la Green 2022); top predictors described in environmental terms; **explicitly report whether *levels* or *trends* carry more signal** (this is a headline question for the author's forecasting claim). (Transformer attribution lives in A11.)
-- **Checks:** "associated with," never "causes"; note if top features are just proxies for chlorophyll.
-
-### A9 · gis — GIS Risk Mapping *(model: fable-5)* ← **M2**
-- **In:** current best model (Stage-1 first; swap to transformer only if it wins the hard splits) + feature pipeline + **native-resolution feature rasters for the mapped date(s)** (from A4; see note) + static sub-km layers (bathymetry, distance-to-coast).
-- **Out:** `hab_risk_grid.gpkg`, `hab_risk_raster.tif`, `priority_monitoring_zones.gpkg`, `outputs/gis/intracell_attention.gpkg`, `outputs/maps/hab_risk_map.html`, QGIS project or `tmap`/`leaflet` script.
-- **Done:** model applied per cell for chosen date(s); identical feature pipeline reused; interactive map has the full layer stack. **Intra-cell attention drill-down (D12/§2.3):** for flagged cells, re-derive the native ~4 km feature pixels within the cell for the mapped date, render a sub-cell feature-intensity overlay, and highlight *convergence* (elevated pixel ∩ shallow/nearshore static context). Prefer level fields; show pixel-level trend fields cautiously or omit.
-- **Checks:** CRS consistent; legends/titles/probability scale present; map is labeled a **forecast at horizon _H_**, states which model produced it, and makes clear it is model output, not observed blooms. **The drill-down is labeled *"where flagging conditions concentrate" (diagnostic), never a sub-cell risk score*; nothing rendered below the native ~4 km pixel; long-horizon maps carry the precursor-drift caveat (§2.3).**
-
-### A10 · validation — Validation & Error Analysis *(model: opus-4-8)*
-- **In:** model outputs + held-out HABSOS cell-days.
-- **Out:** `outputs/tables/error_analysis.csv`; a limitations bullet list (facts, not prose) for the author.
-- **Done:** false pos/neg characterized by season/geography/data-availability; compared against a **chlorophyll-only baseline**.
-- **Checks:** **gate** — if the model doesn't beat chlorophyll-only, say so plainly; limitations captured as `NOTE(limitation)` for A-DOC.
-
-### A11 · transformer — Stage-2 Transformer (**committed, M3**) *(model: fable-5)*
-- **In:** the datacube as **per-cell temporal sequences** (levels + trend features through _T_) + the T+H labels; the Stage-1 results table to beat.
-- **Out:** `outputs/models/transformer.*`, transformer rows appended to `outputs/tables/model_results.csv`, attention/attribution figures, a head-to-head comparison table.
-- **Done:** temporal (or spatiotemporal) transformer trained → forecast `HAB` at T+H; evaluated on the **same horizons and same three splits** as Stage 1; compared directly to baseline + RF.
-- **Checks:** **no look-ahead leakage** in sequence construction (§2.2); same grouped/spatial splits as A7 so the comparison is fair — **the split must be signed off by R-SPLIT (§6.0)**; **honest verdict** — if it doesn't beat RF under the hard splits, report that plainly; guard against overfitting (dropout, early stopping, class weighting rather than naive oversampling — cf. the author's ADASYN notes).
-- **Spawns after M1 is committed** (needs the Stage-1 benchmark); may run in parallel with A9 GIS.
+| HABSOS DwC-A v1.5 | **REAL** | 94,810 cell-day rows, 7,523 positive (7.93%). CC0. |
+| MODIS-Aqua L3m (chl, nFLH, Kd490, SST) | **REAL — FINAL** | 5,829/5,829 dates. **Do not re-pull** (~6 h for nothing). |
+| Bio-optical (bbp_443, bbp_s, Rrs_667, Rrs_678) | **REAL** | 27,641,118 rows, 0 duplicates, 0 fabricated. |
+| ERA5 10 m wind | **REAL** | 65,939/65,939 satellite-era rows. |
+| GEBCO 2026 bathymetry | **REAL** | `depth_m` is model feature **rank 20**. ⚠️ **NON-COMMERCIAL licence** — unresolved, see §11. |
+| TIGER 2023 | **REAL** | `dist_to_shore_m` is feature **rank 18**; 82 county blocks for spatial CV. |
+| **CMEMS SSH** | **TO PULL** → Section H | Duus et al.'s only feature that passes the portability test. `sla`, `adt`, `ugosa`, `vgosa`. 2003-01-01 → 2021-12-31. Credential `~/.copernicusmarine/` — **not** `~/.cdsapirc` (C4). |
+| CHIRPS precipitation | **PLACEHOLDER — parked** | 403 CrowdSec. Re-triggered *by the parallel pull loop itself* (B11 caused it). The feature would be catchment-integrated lagged runoff, not rain-over-ocean-cell. Low priority. |
+| SMAP salinity | **PLACEHOLDER** | OPeNDAP auth deferred. 40–70 km — broad-context only. The master record's "deliberately skipped" is not what the code says. |
 
 ---
 
-## 7. Execution order (dependency graph)
+## 6. Agent roster
 
-```
-scaffold repo ──> A1 sourcing ──> A2 grid+clean ──> A3 habsos-labels ─┐
-                                        │                              │
-                                        ├──> A4 sat-features ──────────┤
-                                        └──> A5 env-features ──────────┤
-                                                                       v
-                                              A6 datacube ──> A7 modeling (Stage 1) ──> A8 explain
-                                                                   │
-                                                                   ├──> A10 validation
-                                                                   ├──> A9  gis (M2, off best model)
-                                                                   └──> A11 transformer (Stage 2 / M3, committed) ──> refresh A9 if it wins
+Canonical names. Do not spawn duplicates. Model assignment and its rationale live in
+**`CLAUDE.md § Model assignment`** — not duplicated here.
 
-A-DOC ── consumes every reports/agent_logs/*.md + files + PDFs ──> paper/source_set.md (FINAL) + references.bib
-Data agents A1–A6 are shadowed by reviewers R1–R6 (§6.0): agent → review → fix → pass, before output counts as done. A7–A11 and A-DOC have no general paired reviewer — except **R-SPLIT** (sonnet-5), which checks only the A7/A11 train/test split for spatial/temporal leakage. Their built-in Checks + the milestone gates apply otherwise.
-```
-**Rule:** A7 cannot begin until `model_dataset.parquet` passes A6's checks **and R6 signs off** (this is the last data-integrity gate — leakage/label errors must be caught here, before modeling). A9 cannot begin until A7 produces a validated best model. A-DOC never blocks anyone but must be current before each milestone commit; its `source_set.md` is the final deliverable. **Run all independent branches in parallel (§11).**
+**Builders (Fable 5):** `env-features` (A5, Section H) · `datacube` (A6 — the rebuild) ·
+`modeling` (A7) · `explain` (A8) · `gis` (A9 — **promoted to co-equal**) · `validation` (A10) ·
+`doc-citations` (A-DOC) · **`arm-parity` (A-ARM — new)**.
+
+**A-ARM** enforces Arm A/Arm B parity: identical folds, seeds, splits, scorer. D-16 (`ranger`'s
+bootstrap is row-order-sensitive; `merge()` reorders `dt`; observed drift ∓0.001–0.006) means an
+unmatched control silently drifts by most of an effect at the +/-0.033 floor (D14b).
+
+**Auditors — continuous, on every write, not at milestone gates:**
+
+| Agent | Model | Owns | The failure it exists for |
+|---|---|---|---|
+| **R-POWER** *(new)* | opus-4-8 | Pre-registration gate | Computes the expected effect against the D14 floor **before** a run. If the effect cannot resolve, **refuse** — or run pre-declared as underpowered. Would have stopped wind, bio-optical, spatial-lag, and cloud-compositing before each burned a week. Also owns: re-deriving D14(a)'s 333 under 7/14/30-day merge rules and reporting the **range**; and the D20 estimand statement. **The floor it gates on is the MEASURED one (D14b, +/-0.033), never a derived one** — the previous revision derived it from sqrt(333) and was wrong. |
+| **R-STARVE** *(new)* | **fable-5** | Too-little-data | P-01: *"Every gate checks for too much information. Nothing checks for too little."* D-01 passed R6 **and** R-SPLIT because it wasn't leaking — it was starving, and the starved null read as a clean mechanistic finding. Verifies source-table cardinality on every join. **Judgment work → Fable. Merge-blocking.** |
+| **R-SPLIT** | **fable-5** | Leakage | Embargo, ≥25 km buffer (D-11 ring-1 diagonal reach), prevalence confound (D-09). **Unchanged — was already Fable, deliberately. Merge-blocking.** |
+| **R-PROV** *(new)* | opus-4-8 | Provenance & single truth | Every number traces to a command. No stale line refs (`07_modeling.R:24` is stale in the register). No second results table (D-19 was deleted; the hazard immediately regenerated as `model_results_bio_inclusive.csv`). Owns D-22. |
+
+**Retired:** `sourcing` (A1), `grid-clean` (A2), `habsos-label` (A3), `sat-features` (A4) — all
+complete; re-running A4 costs ~6 h for nothing. `transformer` (A11) — D7/D8.
+`R1`–`R6` paired reviewers — folded into R-STARVE and R-PROV.
 
 ---
 
-## 8. Feature spec (reference for A4/A5/A6)
+## 7. Execution order
 
-Features come in two families — **levels** (the value at day _T_) and **trends** (how that value has been moving through _T_). Both are predictors by design (D11, §2.2). Everything below must be computed from data **at or before _T_** — no look-ahead.
+```
+Gate 0  ROC-AUC CI  ─────────────────────────────────────────► PASSED 2026-07-16
+   │
+M0  D-04 · renv.lock · CLAUDE.md  ────► push to main
+   │
+   ├─► branch feat/arm-a-portable
+   │
+M1  A6 datacube rebuild (D15 anchor, D17 Arm B lags, D18 slopes)
+   │        │
+   │        └─► A5 Section H (SSH) ── parallel, independent
+   │
+   ├─► R-STARVE + R-SPLIT gate ──► merge blocked until pass
+   │
+M2  A7 LightGBM × {Arm A, Arm B} × {model, rich-persistence, RF}   ◄── A-ARM parity
+   │        │
+   │        └─► R-POWER gate BEFORE each run
+   │
+M3  A9 GIS surface (Arm A only) + D12 drill-down     ◄── co-equal, runs parallel to M2
+   │
+M4  A-DOC source set ──► author writes the paper
+```
 
-**A. Level features (value as of _T_)**
-- *Satellite:* chlor_a mean + max; SST mean + monthly anomaly; **nFLH** (fluorescence) and **FAI** (floating-algae index) — *distinct* indices, compute and label each correctly; Kd490 (water clarity); Rrs band ratios; turbidity proxy.
-- *Meteorological/ocean:* wind speed, direction, along-shore + cross-shore components; precip over prior 3/7/14 days; heavy-rain indicator; sea-surface salinity (broad-context, coarse).
-- *Coastal geography (static):* distance to coast; distance to nearest river mouth; bathymetry; cell centroid lat/lon; county/region.
-- *Seasonality:* month encoding; day-of-year sin/cos.
+---
 
-**B. Trend / rate-of-change features (first-class — D11)**
-For each continuous level feature _x_ (especially chl-a, FAI, nFLH, SST, Kd490):
-- **Absolute deltas:** _x_T − x_{T−k}_ for k ∈ {1, 3, 5, 7}.
-- **Relative day-over-day % change:** _(x_T − x_{T−1}) / x_{T−1}_, plus k-day % change — this is the "10% DoD increase in chlorophyll" signal, stated explicitly.
-- **Trailing slope:** linear-fit slope over 3/5/7-day windows (robust to single-day noise/cloud gaps).
-- **Acceleration (optional):** second difference, to catch blooms that are *speeding up*.
-- **Threshold-crossing flags:** binary indicators such as "chl-a rose >X% DoD for ≥N consecutive days" and "FAI slope above τ over a k-day window" — directly interpretable for the author's write-up and for decision-makers.
-- **Rolling context:** 3-day & 7-day rolling means and rolling std (volatility).
-- **Local spatial gradient:** difference vs. the mean of neighboring cells (is this cell an emerging hotspot?).
+## 8. Feature spec
 
-**C. Historical / spatial-lag**
-- Bloom in an adjacent cell in prior 7 days; nearby positive count in prior 14 days.
+Live spec. Amended, not replaced.
 
-> **Guard against divide-by-zero / instability** in % change when _x_{T−1}_ ≈ 0 (common for chl-a in clear water): use a small epsilon or a log-ratio, and flag it in the notes. **Cloud gaps** make raw day-over-day differences noisy — prefer slopes over gappy windows and record how gaps were handled (`NOTE(paper)`).
-> **For the transformer (Stage 2):** the raw per-cell sequence of level features is fed directly, so the model can learn trend structure itself; still include the engineered trend columns from B so the two stages are compared on equal footing where useful.
+**Levels:** `chlor_a`, `nflh`, `Kd_490`, `sst` · bio-optical `RBD`, `KBBI`, `bbp_443`, `bbp_s`,
+Cannizzaro/Morel discrimination · `depth_m`, `dist_to_shore_m` (**already present — rank 20 and
+18**) · ERA5 wind speed/direction/u/v/along-shore/cross-shore · **SSH `sla`, `adt`, `ugosa`,
+`vgosa`** (new, Section H).
+
+**Trends (D11, amended by D18):** deltas at 1/3/5/7 d · % change with `pct_change_epsilon` ·
+**calendar-day slopes `_slope_{3,5,7}d`** · rolling means/sd · threshold-crossing flags.
+
+**Arm A:** everything above. **Zero HABSOS-derived columns.**
+
+**Arm B (D17):** Arm A + `log10_max_cells_prior_{7,14}d` · `days_since_last_positive` ·
+`max_severity_prior_14d` · `log10_max_cells_neighbors_prior_7d`.
+
+**Retired:** `hab_any_prior_{7,14}d` — superseded by D17 in Arm B, removed entirely from Arm A.
+
+**Permanently unavailable:** **FAI** — requires ~859 nm and ~1240 nm, absent from daily MODIS L3m.
+Confirmed twice including a live OB.DAAC check. L2 swath processing is a different architecture and
+out of scope. Disclosed as a limitation; `nFLH` is the fluorescence discriminator.
+
+**Feature budget (D14/D16):** ~33 features, selected by **train-side OOB rank**, cut pre-declared.
+Never `mean_abs_shap` — it is computed on the test set (D-12) and pruning by it is selection
+leakage. Note OOB calls only 3/149 dead while SHAP calls 86 — that disagreement is itself a
+symptom of 2.2 events/feature, so use ranked OOB with a declared cut, not a deadness threshold.
 
 ---
 
 ## 9. Evaluation protocol
 
-- **Metrics:** accuracy, precision, recall, F1, ROC-AUC, PR-AUC, confusion matrix. **Report recall, PR-AUC, and false-negative rate first** — for early warning, a miss is worse than a false alarm.
-- **Report per forecast horizon.** Every metric is reported for each H ∈ {1,3,5,7,14}, and the **skill-vs-horizon curve** is a required figure — it shows how far ahead the forecast stays useful. Expect and document decay.
-- **Splits (report all three):** (1) random; (2) temporal — train earlier years, test later; (3) spatial — hold out coastal regions/counties. Use grouped splits so spatially adjacent cell-days don't leak across train/test. For the **temporal** split, this is the honest test of forecasting skill.
-- **Two-stage comparison:** reference baselines (persistence, chlorophyll-only) vs. **Random Forest (Stage 1)** vs. **transformer (Stage 2)** reported **in one table**, same horizons, same splits. State plainly whether the transformer's added complexity buys added skill over the RF.
-- **Honesty gate:** if a model only works under the random split, state plainly it does not generalize temporally/spatially — do not headline the random-split number.
-- **Baseline to beat:** (a) a **persistence/naive baseline** ("no change from _T_") — the first thing any forecast must beat — and (b) a chlorophyll-a-only classifier. If BloomGuard doesn't beat both, that is the finding.
-- **Optional (mentor-aligned):** if a count/severity target is pursued later, report RMSE and PAI as in Green (2022) alongside classification metrics.
+Live spec. Amended.
+
+**Splits:** random (indicative) · **temporal (primary)**, **rolling-origin CV per D20**, each fold
+with its own embargo; the single-2016-cutoff split reported alongside for continuity · spatial,
+TIGER county blocks, **≥25 km buffer**, reported with the D-09 prevalence confound stated.
+
+> **Estimand honesty (D20).** Rolling origin estimates *average skill across origins*. The 2016
+> cutoff estimates *skill after 2016*. These are different quantities. State which one every
+> number is, every time. Swapping them silently to get a tighter interval is the same class of
+> error as metric-shopping.
+
+**Metrics:** **PR-AUC primary** and **precision-at-recall-0.80**, because ROC-AUC misleads under
+imbalance (Saito & Rehmsmeier 2015, *PLOS ONE* 10(3):e0118432). **ROC-AUC co-reported** — it is
+the only axis on which Duus et al. (2026) is readable, and it has been in `model_results.csv` all
+along (H=7 = 0.836 [0.7999, 0.8667]).
+
+> **Where ROC and PR disagree, report both.** They already do: RF-vs-persistence resolves on ROC at
+> all five horizons (H=7: +0.0487 [0.0248, 0.0749]) and is **NULL on PR-AUC at H=7**. That is a
+> real property of the comparison under imbalance, not a reason to pick the flattering axis.
+
+**Baselines:** rich-persistence per arm (**D19**) · chlorophyll-only · RF.
+**Every baseline dumps per-row predictions at scoring time.** `chl_only` did not, so its CI cannot
+be computed without a prohibited retrain (Gate 0). A baseline without a prediction dump cannot
+carry a CI, and per rule 5 that makes every Δ against it UNRESOLVED.
+
+**CIs:** mandatory on every Δ. 30-day block bootstrap, n=1000. **No CI ⇒ UNRESOLVED.**
+The measured floor at H=7 under the current split is **±0.033** (40 positive-carrying blocks,
+σ ≈ 0.108). Under D20's rolling origin, ~±0.024. **Cite the measured floor, not a derived one.**
+
+**Statistic must match the claim (P-02).** Marginal rates do not test conditional claims.
+Default-threshold metrics do not test skill — three separate "findings" were artifacts of this
+(persistence "beating" RF; the transformer's recall "advantage"; P0-J "confirmed").
+
+**Threshold sensitivity (not a target change).** Report PR-AUC at 100k / 50k / 10k with **100k as
+the pre-registered headline** (D2). This is a robustness check and the opposite of
+threshold-shopping. Expected finding, already evidenced by E-06: skill collapses below ~100k
+because class-1 recall is **0.000** and class-2 is **0.040** — MODIS cannot separate
+low-concentration *K. brevis* from background. That is mechanistically the same wall as the
+bio-optical negative and the 19× FP concentration: **three independent lines of evidence, one
+cause.**
 
 ---
 
-## 10. Deliverables checklist (agent-produced material the author writes *from*)
+## 10. The paper
 
-- [ ] Complete, verified `data_sources.md` — **A-DOC**
-- [ ] `methods_log.md` + `technique_index.md` (every technique → file → citation) — **A-DOC**
-- [ ] `references.bib`, all entries resolving — **A-DOC**
-- [ ] Study-area grid + datacube — **A2/A6**
-- [ ] End-to-end R pipeline in `R/` — **A1–A6, A9**
-- [ ] Stage-1 results table (RF vs. reference baselines) per horizon + confusion/ROC/PR figures + **skill-vs-horizon curve** — **A7**
-- [ ] SHAP + variable-importance; levels-vs-trends finding — **A8**
-- [ ] Error analysis + limitations facts — **A10**
-- [ ] GIS risk (forecast) layers + interactive map — **A9**
-- [ ] Intra-cell attention drill-down overlay (diagnostic; D12/§2.3) — **A9**
-- [ ] Transformer + head-to-head comparison table + attention/attribution — **A11**
+**Not** "we hit 0.9." The title the evidence supports:
 
-**Not on this list, by design:** abstract, introduction, related-work, methodology prose, discussion, conclusion. **The author writes the paper.**
+> *Portable satellite-only harmful-algal-bloom forecasting on the West Florida Shelf: the cost of
+> dropping the in-situ network, and the event-count ceiling that bounds every model on this shelf.*
 
-**The final deliverable:** `paper/source_set.md` (+ `references.bib`) — the publication-ready, fully-cited source set A-DOC assembles from every agent's decision log. This is what the whole team exists to produce for the author.
+Four contributions, in order of strength:
 
-**Also required from every agent:** its `reports/agent_logs/<agent>.md` decision log (§0.2). Data agents A1–A6 additionally require their paired reviewer's sign-off (§6.0).
+1. **A−B** — the measured cost of portability. Large (removes 20.1% of SHAP mass), therefore
+   resolvable at 333 events, therefore claimable.
+2. **D14's ceiling** — ~17.5 blooms/yr, 333 events in the satellite era, ±0.03 floor. Nobody has
+   stated the limit on this problem in event units. Every future ML paper on this shelf works under
+   it and none of them name it.
+3. **The GIS risk surface** — whole-shelf, decision-ready, Arm-A-only. With the operating envelope
+   stated.
+4. **Four bounding negatives** — wind, bio-optical, spatial-lag, cloud-compositing — now
+   re-read through D14 as measurements of one instrument limit rather than four failures.
 
----
-
-## 11. Execution mode: ASAP & maximally parallel (no calendar)
-
-**There is no multi-week schedule. Run this as fast as the dependency graph allows, spending credits freely to do so.** The only thing that constrains ordering is real data dependencies (§7), not time. Rules for the lead:
-
-- **Parallelize everything that has no unmet dependency.** Once A1 (sourcing) lands raw HABSOS + the grid exists, fan out A3/A4/A5 concurrently. Do not run agents serially "to be safe" — run every independent branch at once.
-- **Reviewers run concurrently with the next agent's work**, not as a blocking serial step: R*n* checks A*n*'s output while downstream agents that don't depend on it proceed. A failed review only blocks the branch that depends on the defective output.
-- **A-DOC and every agent's decision log update continuously**, not in a final pass — the source set is assembled as work lands, so the final deliverable is ready the moment M-work finishes.
-- **Spend credits for speed.** Prefer more parallel agents, larger models where they cut iterations, and immediate re-runs over waiting. Cost is not a constraint here; wall-clock time is.
-- **Gate discipline still holds.** "Fast" does not mean skipping the milestone gates or reviewer sign-off (§3, §6.0) — those prevent the leakage/fabrication errors that would cost far more time in rework than they save. Parallelize *within* the gates; don't remove them.
-
-Rough critical path (the longest unavoidable chain, run everything else alongside it): **sourcing → grid → datacube → RF (M1) → validation, with GIS and the transformer branching off as soon as M1's model exists.** Everything not on that chain (labels, features, A-DOC, explainability) runs in parallel with it.
-
-## 11.1 Risks & backups
-GEE/Copernicus/Earthdata access blocked → downloadable MODIS L3 rasters or shrink study area/time span. **Disk fills during satellite pull** → expected if bulk-downloading; A4's stream-and-discard loop is mandatory (process one day, aggregate, delete raw), so peak disk stays tiny; if still tight, point the download dir at external/synced storage. Too few positives → widen the box or lengthen the year range. Feature extraction too slow → MODIS-only, parallelize the per-day pulls (Nov 15 note). Datacube join blows up → revert to inner/left joins on date only, sample points as in the `gulf` script. **Transformer underperforms or stalls** → ship Stage 1 + GIS as the complete result; the transformer comparison stands as a finding either way (Stage 1 is the paper's core, so the project is never blocked on Stage 2). **Too few positives at long horizons** → shorten H; a solid 3-day forecast beats a broken 14-day one.
+**On the comparator.** Duus, Elshall, Parsons & Ye (2026) *Environments* 13(5):239,
+doi:10.3390/environments13050239, ROC-AUC 0.972. **Decline the comparison on portability
+grounds and say why:** their features (Peace/Caloosahatchee discharge, TN/TP, in-situ salinity,
+lagged cell counts) require a gauge network and a state monitoring programme; the model cannot
+leave SW Florida. Their task is a **regional weekly time series** (~87 positive weeks); ours is a
+4,743-cell daily spatial forecast. They report **no persistence baseline** for a model whose
+dominant predictor is lagged cell counts and whose target is next-week bloom status. **Arm B is the
+in-family point of contact** for anyone who wants the comparison anyway.
 
 ---
 
-## 12. First tasks (do tonight/tomorrow, in order)
+## 11. Open items
 
-1. **Lead:** scaffold the §4 repo (dirs + `.gitkeep` + `.gitignore` + `renv` init + `config.yaml` + `README.md` + `CLAUDE.md`). Commit.
-2. **A1 sourcing:** stand up API pulls for HABSOS + MODIS; for anything not API-pullable, write `manual_downloads.md`. Log every source for A-DOC.
-3. **A2 grid+clean:** define the study-area box in code (**24–31°N, 87–81°W**, Hu et al. 2022); build the grid with the mentor's method (`EPSG:5070`, `cellsize = 10000`, `id_col`). No QGIS step; cell size and extent are locked (D1/D4).
-4. **A3 labels:** produce `habsos_labels.parquet` with binary labels + summary; report positive/negative cell-day counts.
-5. **A-DOC:** open `data_sources.md`, `methods_log.md`, and `references.bib`; seed the citation list from the attached PDFs (Green 2022 + the literature-review notes).
-6. **Gate check:** modeling (**A7**) does **not** begin until `model_dataset.parquet` exists and passes A6's checks. Hold the line.
+1. **✅ RESOLVED (R-PROV, 2026-07-16) — persistence tie-handling.** Root cause: trapezoidal
+   row-walk on a binary score, order-dependent and upward-biased. Canonical = Mann-Whitney
+   ties-0.5 / average precision. `model_results.csv` patched in place (15 persistence rows, 3
+   columns; every other row byte-identical). **Verdict changes:** RF-vs-persistence PR **flips
+   NULL → WIN at H=7 (+0.0659 [+0.0211, +0.1090]) and H=3**; the "persistence beats RF at H=1 on
+   p@r80" claim in `PROJECT.md §2.2` is an artifact of a degenerate operating point. ROC unchanged
+   (Gate 0 was already canonical). **Residual, now M0:** the scorer functions and the
+   `bootstrap_cis_pC.csv` PR rows. See D19 — the flip is a win over a binary baseline and is not
+   reportable until rich-persistence exists.
+2. **⚠️ GEBCO 2026 is NON-COMMERCIAL (GEBCO ToU).** `depth_m` is feature rank 20 in a model being
+   submitted to an IEEE venue. `data/metadata/data_sources.md` flags this as a CRITICAL correction
+   (an earlier pass had it as CC BY 4.0) and says *"confirm with venue."* **Still unresolved. This
+   is a licensing question, not a technical one, and it is the author's call.**
+3. **D14(a)'s 333 is rule-dependent.** 9.4 rows/event indicates thin gappy sampling, which
+   *inflates* interval-based event counts — so 333 is likely an **over**count. R-POWER owns the
+   7/14/30-day sensitivity. Note this affects the **capacity** limit (feature budget, deep-model
+   verdict), **not** the resolution floor — those were conflated in the previous revision and are
+   now separate.
+4. **Unexplained, carried forward:** the OOB-vs-test-SHAP importance disagreement (the
+   sampling-regime hypothesis was refuted by P0-J; 2.2 events/feature is a candidate replacement
+   but is untested). E-01a′'s random-split positives with a correct advection signature against a
+   null temporal split.
+5. **Live defects not yet scheduled:** D-05 (stale DRAFT note, `06_build_datacube.R:73-76`),
+   D-06 (no ocean currents — **partially addressed by SSH `ugosa`/`vgosa` in Section H**),
+   D-12 (`mean_abs_shap` not yet marked diagnostic-only), D-14 (`prec_at_recall80` empty for all
+   15 transformer rows — moot under D8), D-25 (register's line reference is stale).
+6. **Uncommitted from Gate 0:** `outputs/tables/bootstrap_cis_pC.csv` +25 rows;
+   `R/07f_pC_roc_bootstrap.R` untracked. Left for author review.
 
-> When each first task is done, report to the lead in the standard format (did / file produced / done-criteria pass-fail / blocker), then `/commit-push-pr`.
+---
+
+## 12. Execution mode
+
+**ASAP, maximally parallel.** Run every branch with no unmet dependency at once. Credits are not a
+constraint.
+
+> **B11 has one carve-out.** Maximal parallelism is a default, not a law. It is what triggered the
+> CHIRPS CrowdSec ban — 5,829 requests fired at once *is* a bot signature. Any endpoint that
+> rate-limits gets serial access with backoff, and that is not a violation of this section.
+
+**Work lives in git and the filesystem, not in terminal windows** (C1). This survived one memory
+balloon, three window closes, and a garbled terminal with zero loss of committed work. Commit
+frequently during long runs — a crash between commits loses more the longer the gap. Push;
+the remote has drifted 5 commits behind before.
+
+**Long pulls:** `caffeinate -i`, checkpoint by date, resume rather than restart.
+
+**After any interrupted run:** check for orphaned launchers before dispatching fresh work. The
+interrupted bio-optical session left a detached watchdog reparented to launchd that survived
+session death and kept relaunching the pull, plus zombie R processes causing a 3-way write race.

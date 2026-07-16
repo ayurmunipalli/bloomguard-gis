@@ -1,249 +1,267 @@
-# CLAUDE.md — repo operating manual (Claude Code auto-loads this)
+# CLAUDE.md — repo operating manual
 
-**Three files govern this repo. They do not compete:**
-
-- **`CLAUDE.md`** (this file) — *how* we operate. Model assignment, hard rules, push discipline,
-  result cards, environment. **Wins on any operating question.**
-- **`PLAN.md`** — *the spec*. Pinned scientific decisions (§2), feature spec (§8), evaluation
-  protocol (§9), guardrails (§1), agent roles (§6). **Live reference — its §2 is still binding and
-  must not be relitigated.** Its §3 milestones (M1–M3) are complete, and its §6 per-agent model
-  tags are superseded by the table below.
-- **`PROJECT.md`** — *the program*. What is being built now, the queue, the scoreboard, the pivot
-  triggers, and the corrections in its §2. **Wins on any "what do we build next" question.**
-
-Read all three. If PLAN.md and PROJECT.md conflict on *what to build*: PROJECT.md. If either
-conflicts with this file on *how to operate*: this file.
+> Claude Code auto-loads this file. It governs **how agents behave**.
+> `PLAN.md` governs **what we decided and why** (§2 pinned decisions, §8 feature spec,
+> §9 evaluation protocol are **live spec**, not history).
+> `PROJECT.md` governs **what we are doing now and when we stop**.
+>
+> Where these conflict, the more specific file wins for its own domain — and **the conflict is a
+> stop-and-report event**, not something to resolve locally. Three sources of truth is D-22 and
+> it has already happened once.
+>
+> Revision 2026-07-16.
 
 ---
 
 ## Model assignment
 
-**Rule:** anything that *decides* runs **Fable 5** (`claude-fable-5`). Anything that *verifies
-against a written checklist* or *records what happened* runs **Opus 4.8** (`claude-opus-4-8`).
-This supersedes the per-agent model tags in `PLAN.md §6`, which are stale.
+**Rule:** anything that *decides* or *exercises judgment* runs **Fable 5** (`claude-fable-5`).
+Anything that *verifies against a written checklist* or *records what happened* runs
+**Opus 4.8** (`claude-opus-4-8`). This supersedes the per-agent model tags in `PLAN.md §6`.
 
 | Agent | Canonical name | Model |
 |---|---|---|
-| A1 | `sourcing` | fable-5 |
-| A2 | `grid-clean` | fable-5 |
-| A3 | `habsos-label` | fable-5 |
-| A4 | `sat-features` | fable-5 |
 | A5 | `env-features` | fable-5 |
 | A6 | `datacube` | fable-5 |
 | A7 | `modeling` | fable-5 |
-| A8 | `explain` | opus-4-8 |
+| A8 | `explain` | fable-5 |
 | A9 | `gis` | fable-5 |
-| A10 | `validation` | opus-4-8 |
-| A11 | `transformer` | fable-5 |
+| A10 | `validation` | fable-5 |
+| A-ARM | `arm-parity` | fable-5 |
 | A-DOC | `doc-citations` | opus-4-8 |
-| R1–R5 | paired reviewers (A1–A5) | opus-4-8 |
-| **R6** | datacube leakage | **fable-5** |
+| **R-POWER** | pre-registration gate | **opus-4-8** |
+| **R-PROV** | provenance & single truth | **opus-4-8** |
+| **R-STARVE** | too-little-data | **fable-5** |
 | **R-SPLIT** | train/test split leakage | **fable-5** |
 
 Do not spawn duplicates. These are the canonical names.
+**Retired:** `sourcing`, `grid-clean`, `habsos-label`, `sat-features` (complete — re-running
+`sat-features` costs ~6 h for nothing), `transformer` (PLAN.md D7/D8), `R1`–`R6`.
 
-**Why R6 and R-SPLIT are on Fable despite being reviewers.** Fable 5 sits above Opus 4.8 on the
-tier ladder, so "Fable decides, Opus checks" means reviewers are weaker than builders. That is
-fine for mechanical verification — checking *"does this split have an embargo"* is far easier
-than designing one. It is **not** fine for leakage detection, which is judgment work where a
-silent miss invalidates every number in the paper. R-SPLIT has already issued two conditional
-passes that the master record lost track of (see PROJECT.md §2). These two are the only
-reviewers with authority to **block a merge**, and there is no override.
+**Why two auditors are on Fable despite being auditors.** Fable 5 sits above Opus 4.8 on the tier
+ladder, so "Fable decides, Opus checks" means auditors are weaker than the builders they audit.
+That is fine for **mechanical** verification — computing a minimum detectable effect against a
+written floor (R-POWER), or checking that a number traces to a command (R-PROV), is far easier
+than producing the thing being checked. It is **not** fine for **judgment** work:
 
----
+- **R-SPLIT** — a silent leakage miss invalidates every number in the paper. Unchanged from the
+  previous revision; it was already on Fable, deliberately.
+- **R-STARVE** — deciding whether a join is *starved* requires reasoning about what should have
+  been there. D-01 passed R6 **and** R-SPLIT because it wasn't leaking. It was starving, and a
+  starved feature produces a clean, mechanistically-explained null that is **more** convincing
+  than a win. This is the hardest audit in the repo.
 
-## Push before you ask (mandatory)
-
-**Any time you are about to hand a decision back to the author, commit and push first.**
-
-The author reviews this repo through a Claude chat session that reads the *public* GitHub state.
-Unpushed work is invisible to that review. This is not a nicety: one review pass against the
-pushed repo caught four material errors that the summary documents had lost — a test-set-derived
-importance table, two conditional-pass split caveats, a feature-mismatched head-to-head, and a
-horizon sample-size confound. **A question asked against unpushed state gets a worse answer.**
-
-- Before any stop-and-report, author decision, or gate escalation: `git add -A && git commit && git push`.
-- The commit message states **what is being asked**, not only what was done.
-  Format: `wip(<agent>): <what was done> — BLOCKED ON: <the question for the author>`
-- **WIP is fine.** A pushed WIP commit beats a clean unpushed one. Do not tidy before pushing.
-- No experiment is finished until its Result Card is pushed.
-- **If `git push` fails on auth, that IS the blocker.** Fix it (`gh auth login`) before asking
-  anything else. A local-only commit is a commit that does not exist — commit `21320f7`
-  (bio-optical, a documented negative result) has been stranded on one laptop for exactly this
-  reason.
-- Push at the end of every long run, not just at milestones. The remote has drifted 5 commits
-  behind before.
-
-## The notes convention (this is how the paper gets written — enforce it)
-
-Every script opens with a header block: FILE / PURPOSE / INPUTS / OUTPUTS / TECHNIQUES /
-CITATIONS. Tag anything the author will cite or explain:
-
-```
-# NOTE(paper):      goes in the paper body
-# NOTE(cite):       needs a citation resolved by A-DOC
-# NOTE(limitation): goes in the limitations section
-```
-
-**Untagged work does not reach the paper.** A-DOC harvests these into `paper/source_set.md`.
-
-This convention already works and is the reason the split caveats survived at all — R-SPLIT wrote
-them as `NOTE(limitation)` in `R/07_modeling.R:38–60` and they are still the most accurate
-account of the split's honesty in the repo. **Corollary, learned the hard way: a caveat that
-lives only in a script header will not propagate to summary documents. Anything that changes what
-a headline number *means* must also be written to `PROJECT.md §2` in the same commit.**
-
-Every agent also maintains `reports/agent_logs/<name>.md`: Decisions / Data sources used /
-Methods & techniques / Open questions & caveats.
+**R-STARVE and R-SPLIT are the only agents with authority to block a merge. There is no override.**
 
 ---
 
-## Hard rules (violating any of these is a stop-and-report event)
+## Hard rules
+
+Violating any of these is a **stop-and-report** event.
 
 1. **One change at a time.** If you cannot attribute a metric delta to exactly one cause, the
-   result is worthless.
-2. **Feature parity in any model comparison.** The current RF-vs-transformer head-to-head is
-   feature-mismatched (RF has ERA5 wind; the transformer does not). Never compare two models
-   trained on different feature sets and report it as a model-architecture result.
-3. **One scorer.** `outputs/tables/model_results.csv` is the sole authoritative
-   results table — it reports the adopted model. `model_results_bio_inclusive.csv`
-   is a frozen experiment artifact from the bio-optical negative (H=7 temporal
-   PR-AUC 0.4849 vs the adopted 0.5022): do not cite it, do not score against it,
-   do not treat it as a baseline. Any new comparison table needs a name that says
-   it is an experiment, and a header line saying so. Two tables that disagree is
-   how D4 happened; deleting one instance does not retire the rule.
-4. **Feature importance for *selection* must be train-derived.** `mean_abs_shap` in
-   `top_features.csv` / `variable_importance.csv` is computed by permuting the **test set**
-   (`R/08_explainability.R:169–178`). It is a valid *diagnostic* and invalid as a *selection
-   criterion* — pruning or choosing features by it is test-set leakage. Use
-   `permutation_importance` (ranger OOB, train-side) or importance recomputed on training folds.
-   The two disagree materially in this repo (see PROJECT.md §2.5); do not treat them as
-   interchangeable.
-5. **Confidence intervals are mandatory.** Every Δ ships with a block-bootstrap CI (blocks =
-   contiguous time segments, n=1000, report block length), or the verdict is `UNRESOLVED`, not
-   `NULL`. The effects being chased (~0.01 PR-AUC) are the same size as the effects already
-   declared null. Without a CI those declarations are assertions.
-6. **No retraining without explicit authorization.** If a fix does not change features, say so
-   and confirm the artifact is byte-identical.
-7. **Verify credentials with a minimal test call before any large pull.** On failure, STOP and
-   report. Never write a placeholder credential.
-8. **Never fabricate data.** A gap is a gap. Report `n_dates_expected` vs `n_dates_retrieved`.
-   Placeholders are always labeled `IS_PLACEHOLDER = TRUE`.
-9. **Do not cite "Harris et al. 2021, *Harmful Algae* 103:101999."** Appears fabricated; that
-   article number belongs to an unrelated cyanobacteria paper. Real comparators: PROJECT.md §8.
-10. **No prose.** Agents write logs, diagnoses, tables, commit messages. The author writes the paper.
-11. **Match the statistic to the claim.** Marginal rates do not test conditional claims;
-    default-threshold metrics do not test skill. Before declaring any finding, state whether the
-    number is marginal or conditional, default-threshold or matched-recall — and whether that is
-    the quantity the claim actually needs. Three apparent findings in this project (persistence
-    beating the RF, bio-optical harming skill, P0-J CONFIRMED) were artifacts of the wrong one.
+   experiment is void.
+2. **Feature parity in any model comparison.** Every arm has identical features, or the mismatch
+   is stated in the Result Card. `A-ARM` owns parity across Arm A / Arm B: identical folds,
+   seeds, splits, scorer. `ranger`'s bootstrap is row-order-sensitive and `merge()` reorders `dt`
+   — an unmatched control drifts ∓0.001–0.006 silently (D-16), which is most of an effect we
+   cannot resolve anyway.
+3. **One scorer.** `outputs/tables/model_results.csv` is the sole authoritative results table.
+   Two tables that disagree **regenerate** — `head_to_head_comparison.csv` was deleted and the
+   hazard immediately reappeared as `model_results_bio_inclusive.csv` (P-06). If you produce a
+   second results table, R-PROV blocks the merge.
+4. **Feature importance for *selection* must be train-derived.** `mean_abs_shap` is computed on
+   the test set (D-12). Valid as a diagnostic; **selection leakage** as a criterion. Prune by
+   **train-side OOB rank with a pre-declared cut** (PLAN.md §8). OOB calls 3/149 dead, SHAP calls
+   86 — that disagreement is a symptom of 2.2 events/feature, not a signal.
+5. **Confidence intervals are mandatory.** Every Δ ships with a 30-day block-bootstrap CI,
+   n=1000. **No CI ⇒ UNRESOLVED.** Never declare a null on point deltas.
+6. **No retraining without explicit authorization.** If a fix does not change features, say so and
+   re-score. `best_model.rds` should be byte-identical.
+7. **Verify credentials with a minimal test call before any large pull.** On failure, **STOP and
+   report** — never write a placeholder. `~/.cdsapirc` was never written and silently blocked
+   every ERA5 pull (C3).
+   **A HEAD/liveness check is not a credential test.** CHIRPS returns 200 to a single HEAD while
+   banning the sustained GET loop within seconds. A test call must be the same *kind* of request
+   as the real pull.
+8. **Never fabricate data.** A gap is a gap. Report `n_expected` vs `n_retrieved`. Never
+   interpolate silently. Never zero-fill. A10 once zero-filled `month`/`doy` and corrupted every
+   prediction it scored (D-04-era scoring bug).
+9. **Do not cite "Harris et al. 2021, *Harmful Algae* 103:101999."** Fabricated — that article
+   number belongs to an unrelated cyanobacteria paper. **Also: "Green, J. W. (2022), *The
+   Professional Geographer* 74(1):67–78" does not exist.** CrossRef's full 2022 contents for that
+   journal contain no such author, pages, or topic. The RTM/RF grid-cell methodology citation is
+   **Wheeler, A. P. & Steenbeek, W. (2021), *J. Quantitative Criminology* 37(2):445–480,
+   doi:10.1007/s10940-020-09457-7**. Two fabrications have now been found; **A-DOC must resolve
+   every remaining citation against a DOI before submission.**
+10. **No prose.** Agents write logs, diagnoses, tables, Result Cards, commit messages. The author
+    writes the paper.
+11. **Match the statistic to the claim (P-02).** Marginal rates do not test conditional claims.
+    Default-threshold metrics do not test skill. Three separate "findings" were artifacts of this:
+    persistence "beating" the RF, the transformer's recall "advantage", P0-J "CONFIRMED".
+12. **No claim about the repo, the data, or a constant without a command that produced it.**
+    State inference as inference, explicitly. If you cannot verify it, write
+    `NOTE(verify): <claim> — unverified because <reason>` and move on. Every serious error in this
+    project's history has the same shape: a plausible inference reported as a fact. D-01 described
+    a bug and called it a property of the world (P-05). The register's own line references have
+    gone stale (`07_modeling.R:24`). **A wrong number is worse than a gap.**
+13. **R-POWER gates every experiment.** Before a run: state the expected effect size and compare it
+    to the resolution floor (PLAN.md D14: **≈ ±0.03 at H=7**, from **333 effective events**). If
+    the effect cannot resolve, **do not run it** — or run it pre-declared as underpowered and
+    report it as such. Wind, bio-optical, spatial-lag, and cloud-compositing each burned a week
+    proving an effect the instrument cannot see.
+14. **Every rich-lag model ships against a rich-persistence baseline** (PLAN.md D19), built from
+    the same lags that arm uses. Persistence already reaches 70–96% of RF PR-AUC. Enrich the lags
+    and you build a better persistence model. Report what satellite bought over it, in the same
+    table.
+15. **Mirror every `NOTE(limitation)` into `PROJECT.md` in the same commit** (P-04). A caveat that
+    lives only in a script header does not propagate — both split defects were correctly found,
+    written into a header, and lost for months.
 
 ---
 
-## Project guardrails
+## The notes convention
 
-- **This is FORECASTING:** label at day T+H from features observed through T. Every feature and
-  rolling statistic computed at or before T. No look-ahead, ever.
-- **HABSOS non-detection ≠ proven absence.** May be unsampled. State this wherever labels are
-  used. It is not a footnote — it is a live confound in every recall number.
-- **"Associated with," never "causes."**
-- **The intra-cell attention drill-down shows where flagging conditions concentrate** — a
-  diagnostic overlay, **not** a validated sub-cell forecast. Floor is the ~4 km MODIS pixel.
-- **No "operationally ready" claim** unless the model survives the temporal/spatial splits — and
-  see PROJECT.md §2 before assuming it has.
+Every script carries a header block:
 
----
+```r
+# ============================================================
+# FILE:       06_build_datacube.R
+# PURPOSE:    Assemble cell x date x feature datacube for both arms.
+# INPUTS:     data/processed/satellite_features_bio_optical.parquet, ...
+# OUTPUTS:    data/processed/model_dataset_arm_a.parquet, ..._arm_b.parquet
+# TECHNIQUES: calendar-day slope windows, T = label_date - H anchoring
+# CITATIONS:  NOTE(cite) tags inline
+# ============================================================
+```
 
-## Environment
+Inline tags:
 
-- **R-first.** `sf`, `sftime`, `stars`, `tmap`, `data.table`, `ranger`/`caret`, `arrow`, `httr2`.
-  Sourced `.R` scripts that run end-to-end — not notebooks. `renv`; commit `renv.lock`.
-- **Python only** where R has no path: the Stage-2 transformer (`python/`) and TabPFN v2.
-  Handoffs go through parquet on disk, never in-memory bridges.
-- **`wget` is NOT installed.** Use R `download.file()`/`httr2`, or `curl`. Never wget.
-- **Arrow thread guard:** source `R/00_config.R` *before* `library(arrow)` — it sets
-  `ARROW_NUM_THREADS=1`. Skipping this deadlocked the host once (7 processes at 95% CPU, 15 h).
-- **`renv.lock` fixes are narrow only** (`renv::record("pkg")`), never a blind full snapshot.
-  `ecmwfr` is installed-but-unlocked; fix it that way.
-
-## Credentials (never commit)
-NASA Earthdata → `~/.netrc`. Copernicus CDS → `~/.cdsapirc`.
-**`cds.climate.copernicus.eu` (Climate Data Store, ERA5) ≠ `marine.copernicus.eu`** — different
-service, account, and credential. Accept the ERA5 licence on the CDS site or downloads 403 with a
-valid key. `.gitignore` must exclude `data/raw/`, `*.tif`, `*.rds`, `*.pkl`, `.env`, keys/tokens.
-
-## Satellite pulls — stream-and-discard (mandatory)
-MODIS L3 is global-file-only (no server-side bbox). **Never bulk-download the archive.** Per day:
-download → clip to 24–31°N/87–81°W → aggregate to the 10 km grid → append rows → **delete the raw
-file**, in-script (`unlink()`/`file.remove()`), not shell `rm`. Checkpoint by date so an
-interruption resumes rather than restarts. ERA5/CHIRPS support server-side bbox — use it.
+```r
+# NOTE(paper):      goes in the paper body
+# NOTE(cite):       needs a citation resolved by A-DOC
+# NOTE(limitation): goes in the limitations section — AND into PROJECT.md, same commit (rule 15)
+# NOTE(verify):     an unverified constant or assumption (rule 12)
+```
 
 ---
 
 ## Every experiment produces a Result Card
 
-Not done until `reports/results/<experiment_id>.md` exists and its row is in `PROJECT.md §6`.
-
 ```
 # <experiment_id> — <name>
 
-## Hypothesis          one falsifiable claim, written BEFORE the run
-## Change              exactly one thing; diff summary + files touched
-## Feature parity      confirm every arm has identical features, or state the mismatch
-## Metrics             temporal split primary; spatial reported with the prevalence caveat;
-                       random indicative only. PR-AUC, p@r80, recall, FNR, base rate, n_test.
-## Δ vs baseline       with 95% block-bootstrap CI. No CI => UNRESOLVED.
-## Verdict             WIN / NULL / NEGATIVE / UNRESOLVED / SUSPECT (PROJECT.md §6.2)
-## Mechanistic check   did it move the errors it was supposed to move?
-                       (e.g. FP concentration ratio before/after)
-## Baselines           did it beat persistence on recall AND FNR AND PR-AUC?
-## Importance source   if feature selection was involved: state that it was train-side/OOB
-## Gate status         R6: PASS/FAIL/BLOCKED · R-SPLIT: PASS/FAIL/BLOCKED
-## Pushed              commit SHA — the card is not done until it is on the remote
+## Hypothesis        one falsifiable claim, written BEFORE the run
+## Power             expected effect vs the +/-0.03 floor. R-POWER sign-off. (rule 13)
+## Change            exactly one thing; diff summary + files touched
+## Arm               A (portable) or B (instrumented) — never mixed
+## Feature parity    every arm has identical features, or state the mismatch
+## Metrics           temporal primary; spatial with the prevalence caveat; PR-AUC + p@r80 + ROC
+## Baselines         rich-persistence for this arm (rule 14) + chl-only + RF
+## Delta vs baseline with 95% block-bootstrap CI. No CI => UNRESOLVED.
+## Verdict           WIN / NULL / NEGATIVE / UNDERPOWERED / VOID
+## Provenance        the command that produced every number above
 ```
 
-A metric that moves for the wrong reason is not a win. **A model that loses to persistence on
-recall and FNR is not a headline model, whatever its PR-AUC.**
+`UNDERPOWERED` is a first-class verdict. It is **not** the same as `NULL`, and conflating them is
+how four negatives got reported as findings about the world rather than about the instrument.
 
 ---
 
-## Operational discipline (do not relearn)
+## Push before you ask
 
-- **Commit frequently during long runs**, not at milestones. Push; the remote has drifted before
-  and currently lacks the bio-optical branch entirely.
-- **`caffeinate -i` for any pull over ~30 min.** A sleeping Mac stalls pulls silently.
-- **After any interrupted run, hunt for orphans first.** A detached watchdog reparented to
-  launchd once kept relaunching a pull after its session died; zombie R processes caused a 3-way
-  parquet write race. Kill orphaned launchers *before* dispatching fresh work. Single-writer
-  parquet access is enforced by atomic POSIX lockfile.
-- **cmux pinned to 0.64.17.** Never run `cmux --version` (hangs on old builds); use
-  `mdls -name kMDItemVersion /Applications/cmux.app`. Poisoned
-  `session-com.cmuxterm.app*.json` carries crashes forward — move it aside.
-- **Validate `settings.json` with `python3 -m json.tool`.** A wrong `$schema` makes Claude Code
-  silently skip the *entire* file, disabling the sandbox allowlist. If offered "Continue without
-  these settings" — always **Exit and fix**.
-- **Work lives in git and the filesystem, not terminal windows.** Recovery pattern for every
-  crash so far: read `git log` + `reports/agent_logs/`, resume from disk.
+Commit frequently during long runs — a crash between commits loses more the longer the gap. Push
+to the remote; it has drifted 5 commits behind before. Commit `21320f7` sat local-only for a full
+session on stale GitHub auth.
 
-## Reporting
-Return to the lead: did / file produced / done-criteria pass-fail / blocker. Summaries, not
-transcripts. Run `/commit-push-pr` at each milestone.
+**Work lives in git and the filesystem, not in terminal windows** (C1). This has survived one cmux
+memory balloon, three window closes, and a garbled terminal with zero loss of committed work,
+because state is externalised and no single context is load-bearing. Keep it that way.
+
+**After any interrupted run, check for orphaned launchers before dispatching fresh work.** The
+interrupted bio-optical session left a detached auto-resume watchdog — reparented to launchd,
+survived session death — that kept relaunching the pull, plus zombie R processes causing a 3-way
+write race on one parquet. Resolved with an atomic POSIX lockfile (single writer).
 
 ---
 
-## When to stop and ask
+## Terminal output → chat (the copy-paste fix)
 
-- A gate (R6 / R-SPLIT) fails and the fix requires changing the split or the label.
-- The result would change the target definition (e.g. ordinal-severity reframe). Author decision.
-- **A metric improves by more than +0.05 PR-AUC from one change.** That is more likely leakage
-  than skill. Treat it as a bug report until R6 and R-SPLIT clear it.
-- You are about to re-run an experiment with different hyperparameters after a NULL. **Halt.**
-  That is optimizing against the test set, and it is the one thing that would retroactively
-  devalue every honest result in this repo.
+Copy-pasting agent output out of the terminal arrives garbled. **Do not paste terminal text.**
 
-## The discipline that makes the results worth anything
+Write the answer to a file and hand over the file:
 
-The failure mode is not a bad model. It is a *murky* one — a "we threw everything at it" story
-where nobody can say which lever did what. The negative results are assets **because** they were
-not tuned away. If a lever comes back NULL: document it and move on. A clean null is publishable.
-A null hammered into a marginal win is a liability.
+```
+Write your findings to ~/Desktop/<name>.md
+Print only: "Wrote ~/Desktop/<name>.md (<N> lines)"
+Do not paste the file into the terminal.
+```
+
+Then upload that file. No terminal text crosses the boundary, so nothing can be mangled. This is
+also why every diagnostic is a file-producing task, not a print-to-stdout task.
+
+---
+
+## Environment
+
+- **R-first** for data and spatial work (PLAN.md D0). Python only where no R path exists.
+- New environmental sources are **sections of `R/05_environmental_features.R`**
+  (A=TIGER · B=GEBCO · C=dist-to-shore · D=CHIRPS · E=ERA5 · F=SMAP · G=seasonality · **H=SSH**),
+  not new scripts.
+- `data/raw/` is organised **by domain** — `gis/`, `habsos/`, `satellite/`, `weather/` — **not by
+  product**. There is no per-product directory convention.
+- Every dataset gets a row in **`data/metadata/data_sources.md`** with the mandated schema: source
+  URL · date accessed · access method · auth Y/N · spatial resolution · CRS · temporal coverage ·
+  license · purpose. A-DOC verifies it is complete.
+- **`renv.lock` currently records 34 of 176 packages and `ranger` — the model — is unlocked.**
+  A clean `renv::restore()` does not install the model. This is not drift; the lockfile is
+  decorative. Fix narrowly (`renv::record()`), never a blind full snapshot.
+- **`wget` is not installed.** Use R `curl`/`httr2`/`download.file()`.
+- `settings.json` `$schema` must be exactly `json.schemastore.org/claude-code-settings.json`. A
+  wrong URL makes Claude Code skip the **entire** settings file — silently disabling the sandbox
+  allowlist. "Continue without these settings" runs the team with config ignored; always **"Exit
+  and fix."** Validate with `python3 -m json.tool`.
+- **cmux: pin to ≥ 0.64.17.** Versions 0.64.8/0.64.9 balloon to 5 GB+ and crash. Do **not** run
+  `cmux --version` (hangs on old builds); use
+  `mdls -name kMDItemVersion /Applications/cmux.app`. Poisoned `session-com.cmuxterm.app*.json`
+  files carry a crash forward — move them aside.
+
+---
+
+## Credentials — never commit
+
+| Service | File | Gives |
+|---|---|---|
+| NASA Earthdata | `~/.netrc` | MODIS (done), SMAP |
+| Copernicus **CDS** | `~/.cdsapirc` | ERA5 wind (done) |
+| Copernicus **Marine** | `~/.copernicusmarine/` | **SSH — Section H** |
+| Copernicus **Atmosphere** | `~/.adsapirc` | CAMS dust AOD (not scheduled) |
+
+**Copernicus has three siblings.** `cds.climate.copernicus.eu` ≠ `marine.copernicus.eu` ≠
+`ads.atmosphere.copernicus.eu`. Three services, three accounts, three credential files, one brand.
+C4 recorded the first two colliding. Also: accept the licence on the site or downloads 403 with a
+valid key.
+
+Never store credentials in the repo or in any script. Never print them.
+
+---
+
+## Satellite pulls — stream-and-discard (mandatory)
+
+MODIS L3 is served as global daily files with no server-side bbox. Per day: download one global
+file → clip to 24–31°N/87–81°W → aggregate to the 10 km grid → append → **`unlink()` the raw
+file** → next day. Checkpoint by date; resume, never restart. Peak disk ≈ one file (~15 MB) plus a
+growing parquet. This is what kept 300–500 GB off the machine.
+
+**The MODIS pull is FINAL — 5,829/5,829 dates. Do not re-pull.**
+
+---
+
+## Parallelism has one carve-out
+
+**ASAP, maximally parallel** is the default (PLAN.md §12). It is not a law.
+
+It is what triggered the CHIRPS CrowdSec ban: 5,829 requests fired at once **is** a bot signature.
+Any endpoint that rate-limits gets **serial access with exponential backoff**, and that is not a
+violation. A ban is not "transient" and it is not about the IP — wait well over 24 h, and note
+that a passing liveness check does **not** mean the ban has lifted for GETs (rule 7).
