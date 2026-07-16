@@ -285,6 +285,36 @@ Two verifications run before M2a training (`mean()` / base-rate commands on the 
   H=7 temporal test: **71 total / 42 positive-carrying** (was 69/40) — the D14b floor (~±0.033) is
   materially unchanged (the test window extended slightly to 2021-12-24).
 
+### 2.9 M2a result — Arm A vs Arm B, existing ranger (R/07g, 2026-07-16)
+
+One change vs the frozen model: the feature set (Rule 1). Temporal split (primary), tie-safe scorer,
+block-bootstrap CIs (30-day blocks, n=1000, seed 42, paired). All within the new 9.0%-base-rate data
+(NOT compared to the frozen 0.5008 — see §2.8). PR-AUC is the pre-registered primary; ROC reported
+alongside where they disagree.
+
+- **A−B (cost of portability) is LARGE and RESOLVED at every horizon.** PR-AUC A−B = −0.213/−0.190/
+  −0.192/−0.157/−0.128 (H=1/3/5/7/14), every CI excludes 0 and every |Δ| ≫ the ±0.033 floor. ROC A−B
+  at H=7 = −0.103 [−0.136, −0.077]. **Dropping the HABSOS lags costs the portable arm ≈0.16 PR-AUC at
+  H=7.** Arm A H=7: PR 0.332, ROC 0.796; Arm B H=7: PR 0.489, ROC 0.899. This is the contribution
+  (A−B), and it is real — the lags carry most of Arm B's skill, as D13/D19 predicted.
+- **Satellite buys ≈ NOTHING over the boat data on PR (D19 realized).** Arm B vs rich-persistence (a
+  ranger on ONLY the 5 D17 lags): PR-AUC Δ = −0.001/−0.011/−0.005/+0.020/+0.052, **UNRESOLVED (CI incl.
+  0) at H=1/3/5/7**, resolved only at H=14 (+0.052). ROC Δ is small but resolved (+0.015…+0.045). **PR
+  and ROC disagree; PR is primary.** So on the primary metric, Arm B ≈ its own 5-lag persistence at
+  H≤7 — exactly D19's warning that enriching Arm B's lags builds an excellent persistence model. Arm B
+  is, at short horizons, a persistence model with a satellite garnish.
+- **The full satellite stack beats chlorophyll-alone, large and RESOLVED.** Arm A vs chl-persistence
+  (ranger on chlor_a only — effectively `chl_only`; H=7 ROC 0.553 ≈ the frozen chl_only 0.542): PR-AUC
+  Δ = +0.26/+0.25/+0.23/+0.23/+0.20, all CIs exclude 0. SST/nFLH/Kd/bio-optical/wind/trends add ≈0.23
+  PR over chlorophyll.
+
+**NOTE(limitation):** `days_since_last_positive` is stored int; its median-impute value (582.5) was
+truncated to 582 on assignment — a sub-day rounding of imputed NAs only (flagged by its `_is_missing`
+column), no material effect. Random split is indicative only (base rate 7.5%, temporal autocorrelation
+leaks across the 80/20 draw); it shows the same A−B direction but smaller (arm PR ~0.55 vs 0.63).
+`predictions_arms.parquet` (all 4 models × both splits) and `arms_rf_temporal.rds` are dumped
+(gitignored); `best_model.rds` untouched.
+
 ---
 
 ## 3. P0 — prerequisites. Nothing in §5 runs until these land.
