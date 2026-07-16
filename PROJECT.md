@@ -265,6 +265,26 @@ The re-anchored two-arm datacube (`R/06b_build_arms.R`, D15/D13/D17/D18) is buil
   starvation — it is the correct behaviour D18 asked for (a per-day rate, not a per-observation one),
   and is load-bearing under Arm A which has no lags to fall back on.
 
+### 2.8 M2a verifications — the frozen 0.5008 is NOT a valid comparator for the arms (2026-07-16)
+
+Two verifications run before M2a training (`mean()` / base-rate commands on the arm parquets):
+
+- **Arm wind is 100% real: `mean(wind_is_placeholder) = 0` on `model_dataset_arm_a.parquet`**
+  (0% NA on `wind_speed_ms`). The arms take wind from the **daily** `era5_checkpoints`, which cover
+  every anchor cell-date; the "70% REAL" in PLAN.md §5 is specific to
+  `environmental_features.parquet` (HABSOS-date aggregation, 30.45% placeholder) and is **correct for
+  that file, wrong for the arms.** §5's wind row should note the arm value is 0% placeholder. (Author
+  to patch §5 per their M2a-0 note; not patched here — it is a shared spec file.)
+- **New temporal test base rate ≈ 9.0%, not the old 12.1%.** Per-horizon temporal-test base rates on
+  the re-anchored arms: H=1 9.16%, H=3 9.20%, H=5 9.02%, **H=7 9.02% (1923/21323)**, H=14 9.10%
+  (random-split test ≈ 7.5–7.6%). The old H=7 temporal test base rate was **12.1% (1075/8880)**. The
+  drop is the double-sampling requirement being removed (D15): the old row set was HABSOS-at-T *and*
+  T+H, which over-selected bloom-adjacent cell-days. **PR-AUC is base-rate dependent, so no arm
+  PR-AUC can be compared to the frozen 0.5008** — different populations, different prevalence. Only
+  *within-new-data* contrasts (A vs B, arm vs its own baseline) are valid. Block counts on the new
+  H=7 temporal test: **71 total / 42 positive-carrying** (was 69/40) — the D14b floor (~±0.033) is
+  materially unchanged (the test window extended slightly to 2021-12-24).
+
 ---
 
 ## 3. P0 — prerequisites. Nothing in §5 runs until these land.
