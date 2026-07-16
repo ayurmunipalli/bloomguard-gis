@@ -769,8 +769,10 @@ env[is.na(salinity_coarse_flag),    salinity_coarse_flag    := TRUE]
 #              filled value is explicitly traceable. Never let a fill masquerade as observed.
 env[, feature_filled := FALSE]
 
-# Overall IS_PLACEHOLDER = TRUE if ALL dynamic features are placeholder
-env[, IS_PLACEHOLDER := wind_is_placeholder & precip_is_placeholder & salinity_is_placeholder]
+# D-04 fix: IS_PLACEHOLDER = TRUE if ANY dynamic feature is a placeholder. Wind (ERA5) is
+# real, so the old AND made this FALSE on every row while CHIRPS/SMAP were still placeholders —
+# a 0% placeholder rate that read as data health rather than the bug it was.
+env[, IS_PLACEHOLDER := wind_is_placeholder | precip_is_placeholder | salinity_is_placeholder]
 
 # Column order
 setcolorder(env, c("cell_id", "date",
