@@ -345,6 +345,43 @@ reused across horizons and for the random split** (temporal is leakage-clean; ra
   `arms_gbdt_temporal.rds` dumped (gitignored); `lightgbm 4.6.0` recorded in renv.lock (narrow);
   `best_model.rds` untouched.
 
+### 2.11 M3 result — the GIS risk surface, Arm A (R/09a–d, 2026-07-16)
+
+Uses the M2a ranger (`arm_a_H7`), not the M2b GBDT (which was UNRESOLVED vs it, §2.10). Arm A only —
+Arm B's lags are undefined on 99.76% of the grid, so only Arm A can score an unvisited cell.
+
+- **Arm A generalises geographically — it does NOT collapse to random.** Spatial split (Collier block
+  held out, 20 km buffer, 0 residual buffer cells), H=7: **ROC 0.850 [0.807, 0.884]** — above random
+  and *above* the temporal ROC (0.796). ROC is base-rate-independent and is the honest comparison,
+  because **the D-09 confound is live: the spatial-test prevalence is 11.05% vs 9.02% temporal** (the
+  block holdout isolates the hotspot), which inflates the spatial PR-AUC (0.466 vs 0.332). So the
+  surface **is valid on unseen cells** — but this is **n=1 geography, no rotation** (the same D-10
+  objection as the spatial split generally); "generalises to the held-out hotspot" is proven, "to any
+  cell" is not.
+- **The full grid was scored — a first.** 4,743 cells × every clear satellite date = **7,142,860
+  cell-dates (25.84% of the 27,641,118 grid×date space)**; the other **74% are cloudy and get NO
+  prediction (not imputed).** Median 1,100 cloud-free cells/day. Land (`depth_m>0`, 1,363 cells) is
+  excluded by the clear-ocean-colour filter. **NOTE(limitation, B10): 65.9% of grid cells have never
+  carried a HABSOS label in any year, yet receive predictions** — the point of a portable surface, but
+  those predictions **carry no validation** (a non-detection is not proven absence; unsampled ≠ clean).
+- **Operating point + the B9 inversion.** Pre-declared threshold = precision→0.5 on the H=7 temporal
+  test: **τ=0.458, precision 0.502, recall 0.168** — catches 323/1,923 test positives, **misses 83%.**
+  On the *real grid* this flags **median 0 cells/day (mean 5, max 482 during blooms)** — the test's
+  bloom-enriched 9% prevalence does not translate to the mostly-open-ocean grid. **NOTE(limitation):
+  PLAN.md B9 ("recall emphasised, a missed bloom > a false alarm") is CORRECT for a public warning
+  system and WRONG for this product.** This is *sampling prioritisation* ("where to send tomorrow's one
+  boat"), which wants precision at LOW recall; a warning-system recall target would flag 40% of the
+  shelf (recall 0.80 → 0.180 precision) and make the map useless. The product ships high-precision /
+  low-recall by design.
+- **Maps + drill-down.** GeoTIFF+PNG for 4 honest dates (2018 mega-bloom the model never trained on,
+  a true-positive, a false-positive, a missed bloom) with HABSOS points overlaid (`outputs/gis/`).
+  D12 intra-cell drill-down (cell 2269, 2018-10-29): ~4 km MODIS chlor_a pixels inside one flagged
+  10 km cell (0.65–40.4 mg/m³ — strong sub-cell concentration), labelled **on the figure** as a
+  DIAGNOSTIC OVERLAY, not a sub-cell forecast; **no skill metric computed** (no sub-cell label). The
+  4 km granule was re-pulled for this one date (the raw is otherwise stream-and-discarded). Risk
+  surface parquet + GeoTIFFs gitignored; PNGs + `grid_coverage.csv` committed; `best_model.rds`
+  untouched (md5 3ea9a5…).
+
 ---
 
 ## 3. P0 — prerequisites. Nothing in §5 runs until these land.

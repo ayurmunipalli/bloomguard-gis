@@ -1,0 +1,12 @@
+metric,value
+grid_cells,4743
+land_cells_depth_gt0,1363
+cells_ever_labeled,1616
+cells_never_labeled,3127
+frac_grid_never_labeled,0.6593
+cell_dates_available,27641118
+cell_dates_scored_clear,7142860
+frac_scored,0.2584
+dates_covered,5715
+median_daily_cloud_free_cells,1100
+median_daily_cloud_rate,0.7681

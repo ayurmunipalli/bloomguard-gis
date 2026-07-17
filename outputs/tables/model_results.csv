@@ -129,3 +129,8 @@ horizon,split,model,recall,pr_auc,roc_auc,precision,f1,fnr,accuracy,n_test,n_tra
 14,random,gbdt_arm_a,,0.5084,0.8911,,,,,11145,44576,844,,,,,,0.2789
 14,random,gbdt_arm_b,,0.5518,0.918,,,,,11145,44576,844,,,,,,0.3385
 14,random,gbdt_b_richpers,,0.3929,0.8695,,,,,11145,44576,844,,,,,,0.2349
+1,spatial,arm_a_spatial,,0.5674,0.8819,,,,,9767,42498,1094,,,,,,0.3624
+3,spatial,arm_a_spatial,,0.5098,0.8679,,,,,9701,42150,1072,,,,,,0.3296
+5,spatial,arm_a_spatial,,0.5008,0.8582,,,,,9755,42172,1081,,,,,,0.3044
+7,spatial,arm_a_spatial,,0.466,0.8504,,,,,9767,42231,1079,,,,,,0.289
+14,spatial,arm_a_spatial,,0.4144,0.8177,,,,,9719,42357,1054,,,,,,0.2199
