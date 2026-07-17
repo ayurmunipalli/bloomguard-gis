@@ -382,6 +382,110 @@ Arm B's lags are undefined on 99.76% of the grid, so only Arm A can score an unv
   surface parquet + GeoTIFFs gitignored; PNGs + `grid_coverage.csv` committed; `best_model.rds`
   untouched (md5 3ea9a5…).
 
+### 2.12 M4-pull — HALTED AT THE M4-2 GATE. The label record cannot be extended as specified. (2026-07-17)
+
+M4 set out to extend the record past 2021-12-31 using NCEI's live HABSOS. **M4-1 succeeded; M4-2
+failed its own pre-declared gate; M4-4 and M4-5(v2) are therefore not run.** Nothing was trained,
+no v2 arm exists, `best_model.rds` md5 `3ea9a5faf381fba8637b0c952901569c` (unchanged). Full detail:
+`reports/results/M4-2_overlap_audit.md`, `M4-3_aqua_tail_quality.md`, `M4-5_cutoff_sensitivity.md`.
+
+- **The mirror really is dead, and NCEI really is live.** OBIS IPT is still v1.5, published
+  2022-09-30, 190,341 records — nothing new. NCEI serves an open, unauthenticated ArcGIS REST
+  endpoint (`gis.ncdc.noaa.gov/.../HABSOS_CellCounts/MapServer/0`), **220,979 records,
+  1953-08-19 → 2026-07-09**, pulled complete (n_expected = n_retrieved = 220,979, 0 duplicates).
+  `R/01b_pull_habsos_ncei.R`. So the diagnosis behind M4 was right.
+
+- **`NOTE(limitation)` — the overlap does NOT reproduce, so the two sources are different
+  populations.** The DwC-A replay reproduces the frozen record **exactly** (169,871 in bbox /
+  94,810 cell-days / 7,523 positive / 7.93%), which validates the comparison method — and NCEI
+  then **fails** it: 173,232 / 95,430 / **7,475 positive / 7.83%**. It is **not a superset**.
+  On the shared join key: **5,939 frozen cell-days are ABSENT from NCEI, 6,559 are new, 427 differ
+  on `max_count`, and 67 flip the HAB label** (45 0→1, 22 1→0). **Blast radius: 2,494 of the
+  25,600 frozen 2016+ test-era cell-days — 9.7% — no longer exist in the authoritative source**,
+  with 3,376 new ones and 28 label flips inside the test era. Every reported number is computed on
+  a test set that is ~10% disjoint from what NCEI now says happened. **This is an author decision,
+  not an agent one:** adopting NCEI means re-deriving the entire results table; not adopting it
+  means shipping numbers built on a snapshot the source has since revised. Either way it must be
+  disclosed. **Do not silently splice.**
+
+- **`NOTE(limitation)` — HABSOS is starved 2021-07 → 2023-12; the "5 clean years" do not exist.**
+  In-bbox records/month collapse from ~700–1,050 (2021 H1) to **61/30/39/3/0/0** (2021 Jul–Dec),
+  stay at **20–90/month through 2023**, then recover to ~700–970/month from 2024-01. Both sources
+  agree the label record effectively **dies in Sept 2021** — the frozen test window's "2021-12-24"
+  tail rests on **3 cell-days**. The Dec-2022→Mar-2023 SW-Florida bloom IS present (max 2,406,243
+  cells/L) but on **29 samples in Dec 2022**. *Inference, not measurement:* a bloom that size drives
+  intensive FWC sampling, so this reads as an ingest/submission gap rather than a sampling lull —
+  **unverified**, and NOT to be filled either way (rule 8).
+
+- **The prize is ~1/8 of what the brief assumed.** Beyond 2021-12-31 the NCEI record yields
+  **12,430 new cell-days / 259 new positives**, not "~87 events" of comparable weight: 2022 = 8
+  positives, 2023 = 8, **2024 = 125, 2025 = 112, 2026 = 6** (through 07-09). For scale, **2018
+  alone carries 940**. The extension is **+3.4% positives (259 on 7,523)** and its usable content is
+  a **~2-year (2024–2025) out-of-sample holdout**, which is genuinely valuable — but it is not five
+  years and it does not arrive without the relabelling problem above.
+
+- **M4-3 — "post-2021 Aqua is degraded by orbital drift" is REFUTED. Retract it, do not repeat it.**
+  Matched-date design (days 1/11/21 of every month, 2021 vs 2022 — 36 dates/yr, identical products,
+  grid, and aggregation code path, so season and day-of-year are held fixed and the year is the only
+  contrast). **2022 is not worse; if anything it is marginally better.** chlor_a NA 74.0% → **72.3%**,
+  cloud_flag 60.0% → **56.5%**, valid px/cell 1.16 → **1.24**. Paired over 34 complete date-pairs:
+  chlor_a NA **−1.24 pp [−11.04, +8.56], p = 0.80**; valid px **+0.056 [−0.404, +0.515], p = 0.81**.
+  Both CIs contain 0 and exclude material degradation. The assertion was **never verified when
+  first made** — it is now measured, and it is wrong. `R/04c_aqua_tail_quality.R`.
+  - **What IS real: a 14-day Aqua outage in April 2022.** Upstream census of
+    `AQUA_MODIS.<date>.L3m.DAY.CHL.chlor_a.4km.nc`: **2021 = 365/365 days, 2022 = 351/365**, and the
+    entire deficit is **April 2022 (16/30)** — 2022-04-01/02 and 04-10/11/12 return HTTP **404** on a
+    direct GET; every other 2022 month is complete. **`NOTE(verify)`: the cause is NOT established.**
+    It is a gap, recorded as a gap. It is not drift-shaped — drift is gradual and would not cut a
+    14-day hole between two complete months. Do not fill it, do not attribute it.
+  - **`NOTE(limitation)`: retrieval rate ≠ radiometric accuracy.** Aqua's orbit *has* drifted (later
+    equator crossing ⇒ different solar geometry). This test measures **coverage and missingness**,
+    not **bias in the value**. A drift-induced systematic bias in chlor_a would be invisible to every
+    metric above. Settling that needs an in-situ matchup or a cross-sensor comparison (VIIRS/SNPP
+    overlaps Aqua for the whole tail). **Not done. Still open.** So the honest sentence is: *the tail
+    is not degraded in coverage; its calibration is untested.*
+
+- **`NOTE(limitation)` — D-26: `netrc=1` alone does NOT authenticate to Earthdata, and the failure
+  is silent. LIVE IN THE TREE.** `R/04_satellite_features.R:109 download_modis()` sets
+  netrc/cookies/followlocation but never `httpauth`, so libcurl never answers the 401 Basic
+  challenge on the URS redirect. The server returns the **Earthdata Login HTML page at HTTP 200**,
+  **10,730 bytes** — which passes that function's own `sz < 10000L` guard. `rast()` then returns
+  NULL, every cell reads 0 valid pixels, and the run renders as **100% cloud**: a credential failure
+  disguised as weather. Verified same-URL/same-minute: baseline size=10,730 `rast_ok=FALSE`;
+  `+httpauth=1L` size=14,703,583 `rast_ok=TRUE`. **Fixed in `R/04c_aqua_tail_quality.R`** (httpauth +
+  unrestricted_auth + an HDF5 magic-byte check, because size is not a sufficient guard). **NOT
+  patched in `04_satellite_features.R` — author's call**, since that script is frozen and its parquet
+  is FINAL; but anyone who re-runs it today gets a silently all-cloud table. This is CLAUDE.md rule 7's
+  exact failure mode and it was found by rule 8's n_expected/n_retrieved accounting, not by the guard.
+
+- **`NOTE(limitation)` — Arm B in-situ candidates exist but are half-empty, and two are a trap.**
+  NCEI (unlike the DwC-A, which carries neither) ships `WATER_TEMP` **48.8% non-null** (56.7% on
+  2016+), `SALINITY` **49.5%** (52.3%), `SAMPLE_DEPTH` **99.6%**. These are Duus/Ye's features and
+  are **Arm B only** (in-situ ⇒ breaks portability, D13). **`WIND_SPEED` and `WIND_DIR` are present
+  in the schema and 0.0% populated** — they look like free wind features and are empty; do not wire
+  them up. A ~50%-missing in-situ feature on a 2.2-events/feature budget (D14a) is a weak candidate;
+  R-POWER gates it before any run.
+
+- **`NOTE(verify)`** — NCEI serves `GENUS='Karenia'`/`SPECIES='brevis'` only (checked by
+  `returnDistinctValues`), which matches the DwC-A and D2, so the species scope is NOT the source of
+  the disagreement. All in-bbox NCEI records carry `CELLCOUNT_QA = 1`, so **a QA-flag difference does
+  not explain the +3,361 either** — the cause of the disagreement is unidentified. `SAMPLE_DATE`
+  timezone is undeclared by the service; all use is date-only (D4) so it can only matter at a
+  midnight boundary — **unverified**.
+
+- **`NOTE(limitation)` — the 2019 cutoff is the WORSE-powered line, opposite to the brief's
+  framing.** Both lines are pre-declared; reporting both is the sensitivity analysis; picking one
+  post-hoc is protocol-shopping (R-PROV blocks it). On the **v1** arms (which end 2021-12, so these
+  are NOT the v2 numbers the brief's "test 10.5yr / 7.5yr" assumes — that presumed the 2026
+  extension), H=7: the 2016 line gives 21,323 test rows / 1,923 positives / **42 positive-carrying
+  30-day blocks**; the 2019 line gives 8,836 / 486 / **15 blocks**. Since D14b's floor is set by the
+  positive-carrying block count, **2019 is a WIDER CI, not a tighter one**. The mega-bloom lever,
+  named: at the 2016 line **891/891 (100%)** of the 2017-11→2019-01 positives are in TEST; at 2019
+  only **18/891 (2%)** — it moves to train. Concentration inverts too: the largest single 30-day test
+  block holds **169 positives = 8.8%** of H=7 test positives at the 2016 line, but **144 = 29.6%** at
+  the 2019 line. *(The brief's "116 positives (~6%)" does not reproduce — 169/8.8% here; the gap is
+  block phasing, which is arbitrary and unpinned. Both say the same thing.)* `R/06e_cutoff_sensitivity.R`.
+
 ---
 
 ## 3. P0 — prerequisites. Nothing in §5 runs until these land.
